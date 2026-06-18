@@ -1,6 +1,8 @@
 #+vet explicit-allocators
 package mic
 
+import "core:mem"
+import "core:io"
 import "core:path/filepath"
 import "core:fmt"
 import "base:runtime"
@@ -18,7 +20,7 @@ Flags :: struct {
 	file: ^os.File `usage:"the input c source file" args:"required,pos=0"`,
 }
 
-preprocess :: proc(file: ^os.File, allocator: runtime.Allocator) -> string {
+preprocess :: proc(file: ^os.File, allocator: mem.Allocator) -> string {
 	temp := TEMP_ALLOCATOR_GUARD(allocator)
 	temp_dir, err := os.temp_directory(temp)
 	if err != nil {
@@ -73,21 +75,66 @@ preprocess :: proc(file: ^os.File, allocator: runtime.Allocator) -> string {
 	return string(data)
 }
 
+lex_full :: proc(s: string, w: io.Writer) -> int {
+	w := w
 
-lex_full :: proc(s: string) {
 	l: Lexer
-	l_init(&l, s, proc(pos: Pos, format: string, args: ..any) {
-		{
-			temp := TEMP_ALLOCATOR_GUARD()
-			msg := fmt.aprintf(format, ..args, allocator = temp)
-			fmt.eprintfln("Error:%d:%d:%v", pos.line, pos.col, msg)
-		}
-		os.exit(1)
-	})
+	l_init(&l, s, proc(w_raw: rawptr, pos: Pos, format: string, args: ..any) {
+		w := (^io.Writer)(w_raw)^
+		temp := TEMP_ALLOCATOR_GUARD()
+		msg := fmt.aprintf(format, ..args, allocator = temp)
+		fmt.wprintfln(w, "Error:%d:%d:%v", pos.line, pos.col, msg)
+	}, &w)
 
 	for token := l_next_token(&l); token.kind != .EOF; token = l_next_token(&l) {
-		fmt.printfln("%v:%v(%v):%v:%q", token.line, token.col, token.idx, token.kind, token.content)
+		token_len := len(token.content)
+
+		if token_len > 1 {
+			fmt.wprintfln(
+				w,
+				"%v:%v-%v(%v-%v):%v:%q",
+				token.line,
+				token.col,
+				token.col + token_len,
+				token.idx,
+				token.idx + token_len,
+				token.kind,
+				token.content,
+			)
+		} else {
+			fmt.wprintfln(w, "%v:%v(%v):%v:%q", token.line, token.col, token.idx, token.kind, token.content)
+		}
 	}
+
+	return l.errors
+}
+
+parse_full :: proc(s: string, w: io.Writer) -> int {
+	w := w
+
+	l: Lexer
+	l_init(&l, s, proc(w_raw: rawptr, p: Pos, format: string, args: ..any) {
+		w := (^io.Writer)(w_raw)^
+
+		temp := TEMP_ALLOCATOR_GUARD()
+		message := fmt.aprintf(format, ..args, allocator = temp)
+		fmt.wprintf(w, "Error:LEXER:%d:%d:%v\n", p.line, p.col, message)
+	}, &w)
+	u: Unit
+	p: Parser
+	p_init(&p, &u, &l, proc(w_raw: rawptr, t: Token, format: string, args: ..any) {
+		w := (^io.Writer)(w_raw)^
+
+		temp := TEMP_ALLOCATOR_GUARD()
+		message := fmt.aprintf(format, ..args, allocator = temp)
+		fmt.wprintf(w, "Error:PARSER:%d:%d:%v\n", t.line, t.col, message)
+	}, &w)
+
+	p_parse_unit(&p)
+
+	unit_write_human_readable(&u, w)
+
+	return l.errors + p.errors
 }
 
 main :: proc() {
@@ -134,7 +181,15 @@ main :: proc() {
 	output := preprocess(f.file, temp)
 
 	if stage == .Lex {
-		lex_full(output)
+		if 0 < lex_full(output, os.to_stream(os.stdout)) {
+			os.exit(1)
+		}
+	}
+
+	if stage == .Parse {
+		if 0 < parse_full(output, os.to_stream(os.stdout)) {
+			os.exit(1)
+		}
 	}
 }
 
@@ -157,7 +212,7 @@ temp_allocator_fini :: proc "contextless" () {
 
 Temp_Allocator :: struct {
 	using arena: ^virtual.Arena,
-	using allocator: runtime.Allocator,
+	using allocator: mem.Allocator,
 	tmp: virtual.Arena_Temp,
 	loc: runtime.Source_Code_Location,
 }
@@ -167,7 +222,7 @@ TEMP_ALLOCATOR_GUARD_END :: proc(temp: Temp_Allocator) {
 }
 
 @(deferred_out=TEMP_ALLOCATOR_GUARD_END)
-TEMP_ALLOCATOR_GUARD :: #force_inline proc(collisions: ..runtime.Allocator, loc := #caller_location) -> Temp_Allocator {
+TEMP_ALLOCATOR_GUARD :: #force_inline proc(collisions: ..mem.Allocator, loc := #caller_location) -> Temp_Allocator {
 	assert(len(collisions) <= MAX_TEMP_ARENA_COLLISIONS, "Maximum collision count exceeded. MAX_TEMP_ARENA_COUNT must be increased!")
 	good_arena: ^virtual.Arena
 	for i in 0..<MAX_TEMP_ARENA_COUNT {
@@ -201,4 +256,3 @@ _temp_allocator_end :: proc(tmp: virtual.Arena_Temp) {
 init_thread_local_cleaner :: proc "contextless" () {
 	runtime.add_thread_local_cleaner(temp_allocator_fini)
 }
-

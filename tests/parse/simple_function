@@ -1,0 +1,10 @@
+int main(void) {
+    return 2;
+}
+---
+Unit {
+ function_definition: DefFunction {
+   name: main
+   body: Return 2
+  }
+}

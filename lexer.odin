@@ -32,7 +32,7 @@ Pos :: struct {
 	line, col, idx: int
 }
 
-Error_Proc :: #type proc(pos: Pos, format: string, args: ..any)
+L_Error_Proc :: #type proc(data: rawptr, pos: Pos, format: string, args: ..any)
 
 Lexer :: struct {
 	input: string,
@@ -43,18 +43,19 @@ Lexer :: struct {
 	using pos: Pos,
 
 	errors:     int,
-	error_proc: Error_Proc,
+	error_proc: L_Error_Proc,
+	error_data: rawptr,
 }
 
-l_init :: proc(l: ^Lexer, input: string, error_proc: Error_Proc) {
-	l^ = { input = input, error_proc = error_proc, line = 1 }
+l_init :: proc(l: ^Lexer, input: string, error_proc: L_Error_Proc, error_data: rawptr = nil) {
+	l^ = { input = input, error_proc = error_proc, error_data = error_data, line = 1 }
 	l_next_ch(l)
 }
 
 l_error :: proc(l: ^Lexer, format: string, args: ..any) {
 	l.errors += 1
 	if l.error_proc != nil {
-		l.error_proc(l.pos, format, ..args)
+		l.error_proc(l.error_data, l.pos, format, ..args)
 	}
 }
 
@@ -134,6 +135,7 @@ l_read_constant :: proc(l: ^Lexer) -> (t: Token) {
 	if l_is_ident_letter(l.ch) {
 		// TODO: support constant suffixes
 		l_error(l, "constant suffixes not supported")
+		t.kind = .Invalid
 	}
 
 	t.content = l.input[t.idx:l.idx]

@@ -1,0 +1,16 @@
+int main(void) {
+    return 1foo;
+}
+---
+1:1-4(0-3):Int:"int"
+1:5-9(4-8):Identifier:"main"
+1:9(8):Open_Paren:"("
+1:10-14(9-13):Void:"void"
+1:14(13):Close_Paren:")"
+1:16(15):Open_Brace:"{"
+2:5-11(21-27):Return:"return"
+Error:2:13:constant suffixes not supported
+2:12(28):Invalid:"1"
+2:13-16(29-32):Identifier:"foo"
+2:16(32):Semicolon:";"
+3:1(34):Close_Brace:"}"

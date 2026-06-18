@@ -1,4 +1,4 @@
-package mic_tests_lex
+package mic_tests_parse
 
 import "core:path/filepath"
 import "core:fmt"
@@ -7,11 +7,11 @@ import "../../"
 
 import "core:os"
 tests := []string{
-	"invalid_identifier",
+	"simple_function",
 }
 
 SPLIT :: "\n---\n"
-TESTS_DIR :: "./tests/lex"
+TESTS_DIR :: "./tests/parse"
 
 main :: proc() {
 	for test_file in tests {
@@ -28,7 +28,7 @@ main :: proc() {
 
 		b: strings.Builder
 		defer strings.builder_destroy(&b)
-		mic.lex_full(code, strings.to_stream(&b))
+		mic.parse_full(code, strings.to_stream(&b))
 		new_result := strings.trim_space(strings.to_string(b))
 
 		if result != new_result {
