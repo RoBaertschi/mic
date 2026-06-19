@@ -137,6 +137,41 @@ parse_full :: proc(s: string, w: io.Writer) -> int {
 	return l.errors + p.errors
 }
 
+codegen_full :: proc(s: string, w: io.Writer) -> int {
+	w := w
+
+	l: Lexer
+	l_init(&l, s, proc(w_raw: rawptr, p: Pos, format: string, args: ..any) {
+		w := (^io.Writer)(w_raw)^
+
+		temp := TEMP_ALLOCATOR_GUARD()
+		message := fmt.aprintf(format, ..args, allocator = temp)
+		fmt.wprintf(w, "Error:LEXER:%d:%d:%v\n", p.line, p.col, message)
+	}, &w)
+	u: Unit
+	p: Parser
+	p_init(&p, &u, &l, proc(w_raw: rawptr, t: Token, format: string, args: ..any) {
+		w := (^io.Writer)(w_raw)^
+
+		temp := TEMP_ALLOCATOR_GUARD()
+		message := fmt.aprintf(format, ..args, allocator = temp)
+		fmt.wprintf(w, "Error:PARSER:%d:%d:%v\n", t.line, t.col, message)
+	}, &w)
+
+	p_parse_unit(&p)
+
+	total_errors := l.errors + p.errors
+
+	if total_errors > 0 {
+		return total_errors
+	}
+
+	asm_u: Asm_Unit
+	asm_emit(&u, &asm_u)
+
+	return 0
+}
+
 main :: proc() {
 	context.logger = log.create_console_logger(opt = { .Level, .Terminal_Color }, allocator = context.allocator)
 
@@ -146,7 +181,7 @@ main :: proc() {
 	flags.parse_or_exit(&f, os.args, .Unix, allocator = temp)
 
 	Stage :: enum {
-		None,
+		Emit,
 		Lex,
 		Parse,
 		Codegen,
@@ -159,7 +194,7 @@ main :: proc() {
 	}
 
 	if f.parse {
-		if stage != .None {
+		if stage != .Emit {
 			log.fatalf("multiple stage specifiers found, while only one at the time is supported")
 			os.exit(1)
 		}
@@ -167,14 +202,14 @@ main :: proc() {
 	}
 
 	if f.codegen {
-		if stage != .None {
+		if stage != .Emit {
 			log.fatalf("multiple stage specifiers found, while only one at the time is supported")
 			os.exit(1)
 		}
 		stage = .Codegen
 	}
 
-	if stage == .None {
+	if stage == .Emit {
 		stage = .Codegen
 	}
 
@@ -191,6 +226,12 @@ main :: proc() {
 			os.exit(1)
 		}
 	}
+
+	 if stage == .Codegen {
+		if 0 < codegen_full(output, os.to_stream(os.stdout)) {
+			os.exit(1)
+		}
+	 }
 }
 
 @(private="file")
