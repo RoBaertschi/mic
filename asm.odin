@@ -1,5 +1,6 @@
 package mic
 
+import "core:io"
 import "core:fmt"
 import "core:mem"
 import "core:container/xar"
@@ -56,6 +57,37 @@ Asm_Register :: enum {
 
 Asm_Immediate :: distinct int
 
+asm_unit_write_human_readable :: proc(u: ^Asm_Unit, w: io.Writer) {
+	fmt.wprintf(w, "Asm_Unit {{\n Function %q {{\n", u.function.name)
+
+	for it := xar.iterator(&u.function.instructions); inst in xar.iterate_by_val(&it) {
+		switch i in inst {
+		case Asm_Inst_Mov:
+			io.write_string(w, "  mov ")
+			asm_operand_write_human_readable(i.src, w)
+			io.write_string(w, " -> ")
+			asm_operand_write_human_readable(i.dst, w)
+			io.write_string(w, "\n")
+		case Asm_Inst_Ret:
+			io.write_string(w, "  ret\n")
+		}
+
+	}
+	io.write_string(w, " }\n}\n")
+}
+
+asm_operand_write_human_readable :: proc(operand: Asm_Operand, w: io.Writer) {
+	switch op in operand {
+	case Asm_Immediate:
+		io.write_int(w, int(op))
+	case Asm_Register:
+		switch op {
+		case .Eax:
+			io.write_string(w, "Register.Eax")
+		}
+	}
+}
+
 // TODO(robin): temporary, will be removed when Tacky will be added
 
 asm_emit :: proc(in_u: ^Unit, out_u: ^Asm_Unit) {
@@ -74,7 +106,7 @@ asm_emit_body :: proc(i: ^Asm_Instructions, body: ^Ast_Stmt) {
 		operand := asm_emit_expr(b.result, i)
 		xar.push_back(
 			i,
-			Asm_Inst_Mov{ dst = operand, src = .Eax },
+			Asm_Inst_Mov{ src = operand, dst = .Eax },
 			Asm_Inst_Ret{},
 		)
 	}

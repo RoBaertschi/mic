@@ -169,6 +169,8 @@ codegen_full :: proc(s: string, w: io.Writer) -> int {
 	asm_u: Asm_Unit
 	asm_emit(&u, &asm_u)
 
+	asm_unit_write_human_readable(&asm_u, w)
+
 	return 0
 }
 
