@@ -29,20 +29,19 @@ preprocess :: proc(file: ^os.File, allocator: mem.Allocator) -> string {
 		os.exit(1)
 	}
 
-	preprocessed_file: ^os.File
-	preprocessed_file, err = os.create_temp_file(temp_dir, fmt.aprintf("%s-*.i", filepath.stem(filepath.base(os.name(file))), allocator = temp))
+	r_preprocessed, w_preprocessed: ^os.File
+	r_preprocessed, w_preprocessed, err = os.pipe()
 	if err != nil {
-		log.fatalf("could not create preprocessed file: %v", err)
+		log.fatalf("could not create preprocessed pipes: %v", err)
 		os.exit(1)
 	}
 	defer {
-		os.remove(os.name(preprocessed_file))
-		os.close(preprocessed_file)
+		os.close(r_preprocessed)
 	}
 
 	desc := os.Process_Desc{
 		command = { "gcc", "-E", "-P", "-", "-o", "-" },
-		stdout  = preprocessed_file,
+		stdout  = w_preprocessed,
 		stdin   = file,
 	}
 
@@ -62,10 +61,13 @@ preprocess :: proc(file: ^os.File, allocator: mem.Allocator) -> string {
 		os.exit(1)
 	}
 
-	os.seek(preprocessed_file, 0, .Start)
+	// NOTE: needs to be closed before we want to read but after all the writes are done
+	os.close(w_preprocessed)
+
+	os.seek(r_preprocessed, 0, .Start)
 
 	data: []byte
-	data, err = os.read_entire_file(preprocessed_file, allocator)
+	data, err = os.read_entire_file(r_preprocessed, allocator)
 
 	if err != nil {
 		log.fatalf("could not read output of preprocessor: %v", err)
@@ -174,6 +176,43 @@ codegen_full :: proc(s: string, w: io.Writer) -> int {
 	return 0
 }
 
+emit_full :: proc(s: string, w: io.Writer) -> int {
+	w := w
+
+	l: Lexer
+	l_init(&l, s, proc(w_raw: rawptr, p: Pos, format: string, args: ..any) {
+		w := (^io.Writer)(w_raw)^
+
+		temp := TEMP_ALLOCATOR_GUARD()
+		message := fmt.aprintf(format, ..args, allocator = temp)
+		fmt.wprintf(w, "Error:LEXER:%d:%d:%v\n", p.line, p.col, message)
+	}, &w)
+	u: Unit
+	p: Parser
+	p_init(&p, &u, &l, proc(w_raw: rawptr, t: Token, format: string, args: ..any) {
+		w := (^io.Writer)(w_raw)^
+
+		temp := TEMP_ALLOCATOR_GUARD()
+		message := fmt.aprintf(format, ..args, allocator = temp)
+		fmt.wprintf(w, "Error:PARSER:%d:%d:%v\n", t.line, t.col, message)
+	}, &w)
+
+	p_parse_unit(&p)
+
+	total_errors := l.errors + p.errors
+
+	if total_errors > 0 {
+		return total_errors
+	}
+
+	asm_u: Asm_Unit
+	asm_emit(&u, &asm_u)
+
+	asm_write(&asm_u, w)
+
+	return 0
+}
+
 main :: proc() {
 	context.logger = log.create_console_logger(opt = { .Level, .Terminal_Color }, allocator = context.allocator)
 
@@ -211,29 +250,65 @@ main :: proc() {
 		stage = .Codegen
 	}
 
-	if stage == .Emit {
-		stage = .Codegen
-	}
-
 	output := preprocess(f.file, temp)
 
-	if stage == .Lex {
+	switch stage {
+	case .Lex:
 		if 0 < lex_full(output, os.to_stream(os.stdout)) {
 			os.exit(1)
 		}
-	}
-
-	if stage == .Parse {
+	case .Parse:
 		if 0 < parse_full(output, os.to_stream(os.stdout)) {
 			os.exit(1)
 		}
-	}
-
-	 if stage == .Codegen {
+	case .Codegen:
 		if 0 < codegen_full(output, os.to_stream(os.stdout)) {
 			os.exit(1)
 		}
-	 }
+	case .Emit:
+		name := os.name(f.file)
+		program_name := filepath.stem(name)
+
+		r_asm, w_asm, err := os.pipe()
+		if err != nil {
+			log.fatalf("could not create pipe: %v", err)
+			os.exit(1)
+		}
+
+		process_desc := os.Process_Desc{
+			command = { "gcc", "-xassembler", "-", "-o", program_name },
+			stdin   = r_asm,
+			stdout  = os.stdout,
+			stderr  = os.stderr,
+		}
+
+		process: os.Process
+		process, err = os.process_start(process_desc)
+
+		if err != nil {
+			log.fatalf("could not create process: %v", err)
+			os.exit(1)
+		}
+
+		// NOTE: needs to be closed before we want to read but after all the writes are done
+		os.close(r_asm)
+
+
+		if 0 < emit_full(output, os.to_stream(w_asm)) {
+			os.exit(1)
+		}
+
+		// NOTE: needs to be closed before we want to read but after all the writes are done
+		os.close(w_asm)
+
+		process_state: os.Process_State
+		process_state, err = os.process_wait(process)
+
+		if err != nil {
+			log.fatalf("could not wait for process: %v", err)
+			os.exit(1)
+		}
+	}
 }
 
 @(private="file")
