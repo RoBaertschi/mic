@@ -266,10 +266,16 @@ main :: proc() {
 			os.exit(1)
 		}
 	case .Emit:
-		name := os.name(f.file)
-		program_name := filepath.stem(name)
+		info, err := os.fstat(f.file, temp)
+		if err != nil {
+			log.fatalf("could not stat input file: %v", err)
+			os.exit(1)
+		}
 
-		r_asm, w_asm, err := os.pipe()
+		program_name, _ := filepath.join({ filepath.dir(info.fullpath), filepath.stem(info.fullpath) }, allocator = temp)
+
+		r_asm, w_asm: ^os.File
+		r_asm, w_asm, err = os.pipe()
 		if err != nil {
 			log.fatalf("could not create pipe: %v", err)
 			os.exit(1)
