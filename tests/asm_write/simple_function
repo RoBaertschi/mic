@@ -1,0 +1,10 @@
+int main(void) {
+    return 2;
+}
+---
+	.globl main
+main:
+	movl $2, %eax
+	ret
+
+	.section .note.GNU-stack,"",@progbits

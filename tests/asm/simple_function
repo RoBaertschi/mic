@@ -1,0 +1,10 @@
+int main(void) {
+    return 2;
+}
+---
+Asm_Unit {
+ Function "main" {
+  mov 2 -> Register.Eax
+  ret
+ }
+}
