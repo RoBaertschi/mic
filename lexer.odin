@@ -7,11 +7,14 @@ Token_Kind :: enum {
 	Invalid,
 	EOF,
 
-	Open_Paren,
-	Close_Paren,
-	Open_Brace,
-	Close_Brace,
-	Semicolon,
+	Open_Paren,  // (
+	Close_Paren, // )
+	Open_Brace,  // {
+	Close_Brace, // }
+	Semicolon,   // ;
+	Tilde,       // ~
+	Hyphen,      // -
+	TwoHyphen,   // --
 
 	Identifier,
 	Constant,
@@ -81,6 +84,14 @@ l_next_ch :: proc(l: ^Lexer) {
 	} else {
 		l.ch, l.ch_len = utf8.RUNE_EOF, 0
 	}
+}
+
+l_peek_ch :: proc(l: ^Lexer) -> rune {
+	if l.idx + l.ch_len >= len(l.input) {
+		return utf8.RUNE_EOF
+	}
+	r, _ := utf8.decode_rune(l.input[l.idx+l.ch_len:])
+	return r
 }
 
 l_is_digit :: proc(ch: rune) -> bool {
@@ -160,7 +171,16 @@ l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 	case '{':           t.kind = .Open_Brace
 	case '}':           t.kind = .Close_Brace
 	case ';':           t.kind = .Semicolon
+	case '~':           t.kind = .Tilde
 	case utf8.RUNE_EOF: t.kind = .EOF
+
+	case '-':
+		if l_peek_ch(l) == '-' {
+			t.kind = .TwoHyphen
+		} else {
+			t.kind = .Hyphen
+		}
+	
 	case:
 		l_error(l, "unexpected character %q", l.ch)
 	}

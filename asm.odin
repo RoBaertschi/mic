@@ -118,6 +118,8 @@ asm_emit_expr :: proc(expr: ^Ast_Expr, i: ^Asm_Instructions) -> Asm_Operand {
 	case ^Ast_Expr_Error: panic("Error expr")
 	case ^Ast_Expr_Constant:
 		return Asm_Immediate(e.value)
+	case ^Ast_Expr_Unary:
+		unimplemented()
 	}
 	fmt.panicf("missing case %v", expr.variant)
 }

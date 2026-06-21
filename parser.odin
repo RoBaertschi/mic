@@ -1,7 +1,29 @@
 #+vet explicit-allocators
 package mic
 
+import "core:fmt"
 import "core:strconv"
+
+P_Precedence :: enum {
+	Lowest,
+	Prefix,
+}
+
+p_precedences := #partial [Token_Kind]P_Precedence {}
+
+P_Prefix_Proc :: #type proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool)
+
+p_prefix_procs := #partial [Token_Kind]P_Prefix_Proc {
+	.Constant   = p_parse_constant,
+	.Hyphen     = p_parse_unary,
+	.Tilde      = p_parse_unary,
+	.Open_Paren = p_parse_grouped_expression,
+}
+
+P_Infix_Proc :: #type proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool)
+
+p_infix_procs := #partial [Token_Kind]P_Infix_Proc {}
+
 P_Error_Proc :: #type proc(data: rawptr, t: Token, format: string, args: ..any)
 
 Parser :: struct {
@@ -61,27 +83,67 @@ p_expect_peek :: proc(p: ^Parser, peek: Token_Kind) -> (t: Token, ok: bool) {
 	return
 }
 
+p_peek_prec :: proc(p: ^Parser) -> P_Precedence {
+	return p_precedences[p.peek_token.kind]
+}
+
 p_parse_unit :: proc(p: ^Parser) {
 	p.u.function = p_parse_def_function(p)
 	p_expect_peek(p, .EOF)
 }
 
 p_parse_def_function :: proc(p: ^Parser) -> (def: ^Ast_Def_Function) {
-	p_expect(p, .Int)
-	ident, _ := p_expect_peek(p, .Identifier)
+	p_skip_def_function :: proc(p: ^Parser) {
+		for p.current_token.kind != .EOF && p.current_token.kind != .Close_Brace {
+			p_next_token(p)
+		}
+	}
 
-	p_expect_peek(p, .Open_Paren)
-	p_expect_peek(p, .Void)
-	p_expect_peek(p, .Close_Paren)
-	p_expect_peek(p, .Open_Brace)
+	def = ast_new(p.u, p.current_token, Ast_Def_Function)
+	if _, ok := p_expect(p, .Int); !ok {
+		p_skip_def_function(p)
+		return
+	}
+
+	ident, ok := p_expect_peek(p, .Identifier)
+	if !ok {
+		p_skip_def_function(p)
+		return
+	}
+
+	def.t = ident
+	def.name = ast_new_ident(p.u, ident)
+
+	if _, ok := p_expect_peek(p, .Open_Paren); !ok {
+		p_skip_def_function(p)
+		return
+	}
+
+	if _, ok := p_expect_peek(p, .Void); !ok {
+		p_skip_def_function(p)
+		return
+	}
+
+	if _, ok := p_expect_peek(p, .Close_Paren); !ok {
+		p_skip_def_function(p)
+		return
+	}
+
+	if _, ok := p_expect_peek(p, .Open_Brace); !ok {
+		p_skip_def_function(p)
+		return
+	}
+
 	p_next_token(p)
 
 	stmt := p_parse_stmt(p)
-	p_expect_peek(p, .Close_Brace)
 
-	def = ast_new(p.u, ident, Ast_Def_Function)
+	if _, ok := p_expect_peek(p, .Close_Brace); !ok {
+		p_skip_def_function(p)
+		return
+	}
+
 	def.body = stmt
-	def.name = ast_new_ident(p.u, ident)
 	return
 }
 
@@ -109,7 +171,7 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 	stmt_return := ast_new(p.u, return_token, Ast_Stmt_Return)
 	p_next_token(p)
 
-	stmt_return.result, ok = p_parse_expr(p)
+	stmt_return.result, ok = p_parse_expr(p, .Lowest)
 	if !ok {
 		p_skip_stmt(p)
 		return stmt_return
@@ -120,7 +182,69 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 	return stmt_return
 }
 
-p_parse_expr :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
+p_parse_expr :: proc(p: ^Parser, prec: P_Precedence) -> (expr: ^Ast_Expr, ok: bool) {
+	prefix_proc := p_prefix_procs[p.current_token.kind]
+	if prefix_proc == nil {
+		p_error(p, p.current_token, "invalid token for expression %v", p.current_token.kind)
+		expr = ast_new_expr_error(p.u, p.current_token)
+		return
+	}
+
+	expr, ok = prefix_proc(p)
+	if !ok {
+		// NOTE: expr should be retained
+		return
+	}
+
+	for p.peek_token.kind != .Semicolon && prec < p_peek_prec(p) {
+		infix_proc := p_infix_procs[p.peek_token.kind]
+		if infix_proc == nil {
+			// TODO: postfix
+			return
+		}
+
+		p_next_token(p)
+		expr, ok = infix_proc(p, expr)
+		if !ok {
+			return
+		}
+	}
+
+	// TODO: postfix
+	return
+}
+
+p_parse_grouped_expression :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
+	p_next_token(p)
+
+	expr, ok = p_parse_expr(p, .Lowest)
+	if !ok {
+		return
+	}
+
+	_, ok = p_expect_peek(p, .Close_Paren)
+	return
+}
+
+p_parse_unary :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
+	unary_expr := ast_new(p.u, p.current_token, Ast_Expr_Unary)
+	expr = unary_expr
+
+	#partial switch p.current_token.kind {
+	case .Hyphen:
+		unary_expr.operator = .Negate
+	case .Tilde:
+		unary_expr.operator = .Complement
+	case:
+		fmt.panicf("invalid token kind for p_parse_unary: %v", p.current_token.kind)
+	}
+
+	p_next_token(p)
+	unary_expr.inner, ok = p_parse_expr(p, .Prefix)
+	return
+}
+
+p_parse_constant : P_Prefix_Proc : proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
 	token: Token
 	token, ok = p_expect(p, .Constant)
 	if !ok {

@@ -65,7 +65,7 @@ Ast_Stmt_Return :: struct {
 Ast_Expr :: struct {
 	t: Token,
 
-	variant: union { ^Ast_Expr_Error, ^Ast_Expr_Constant },
+	variant: union { ^Ast_Expr_Error, ^Ast_Expr_Constant, ^Ast_Expr_Unary },
 }
 
 Ast_Expr_Error :: struct { using expr: Ast_Expr }
@@ -78,6 +78,18 @@ Ast_Expr_Constant :: struct {
 	using expr: Ast_Expr,
 
 	value: int,
+}
+
+Ast_Unary_Operator :: enum {
+	Complement,
+	Negate,
+}
+
+Ast_Expr_Unary :: struct {
+	using expr: Ast_Expr,
+
+	operator: Ast_Unary_Operator,
+	inner:    ^Ast_Expr,
 }
 
 @(private="file")
@@ -104,7 +116,11 @@ ast_def_function_write_human_readable :: proc(def_function: ^Ast_Def_Function, w
 
 	io.write_string(w, "DefFunction {\n")
 	pad(w, depth+1)
-	fmt.wprintf(w, "name: %v\n", def_function.name.ident)
+	if def_function.name != nil {
+		fmt.wprintf(w, "name: %v\n", def_function.name.ident)
+	} else {
+		io.write_string(w, "name: <invalid function>\n")
+	}
 	pad(w, depth+1)
 	io.write_string(w, "body: ")
 	if def_function.body != nil {
@@ -145,5 +161,15 @@ ast_expr_write_human_readable :: proc(expr: ^Ast_Expr, w: io.Writer, depth: int)
 		io.write_string(w, "<error expr>")
 	case ^Ast_Expr_Constant:
 		io.write_int(w, e.value)
+	case ^Ast_Expr_Unary:
+		switch e.operator {
+		case .Complement:
+			io.write_rune(w, '~')
+		case .Negate:
+			io.write_rune(w, '-')
+		}
+		io.write_rune(w, '(')
+		ast_expr_write_human_readable(e.inner, w, depth)
+		io.write_rune(w, ')')
 	}
 }
