@@ -1,0 +1,9 @@
+int main(void) {
+    return 2;
+}
+---
+Tacky_Unit {
+ Function "main" {
+  return $2
+ }
+}

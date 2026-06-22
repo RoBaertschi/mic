@@ -13,9 +13,10 @@ import "core:flags"
 import "core:mem/virtual"
 
 Flags :: struct {
-	lex:     bool `usage:"only lex the provided c source file"`,
-	parse:   bool `usage:"lex and parse the provided c source file"`,
-	codegen: bool `usage:"compile the provided c source file"`,
+	lex:      bool `usage:"only lex the provided c source file"`,
+	parse:    bool `usage:"lex and parse the provided c source file"`,
+	tacky:    bool `usage:"only generate the tacky for the provided c source file"`,
+	codegen:  bool `usage:"compile the provided c source file"`,
 
 	file: ^os.File `usage:"the input c source file" args:"required,pos=0"`,
 }
@@ -139,7 +140,7 @@ parse_full :: proc(s: string, w: io.Writer) -> int {
 	return l.errors + p.errors
 }
 
-codegen_full :: proc(s: string, w: io.Writer) -> int {
+parse_ast :: proc(s: string, u: ^Unit, w: io.Writer) -> int {
 	w := w
 
 	l: Lexer
@@ -150,9 +151,8 @@ codegen_full :: proc(s: string, w: io.Writer) -> int {
 		message := fmt.aprintf(format, ..args, allocator = temp)
 		fmt.wprintf(w, "Error:LEXER:%d:%d:%v\n", p.line, p.col, message)
 	}, &w)
-	u: Unit
 	p: Parser
-	p_init(&p, &u, &l, proc(w_raw: rawptr, t: Token, format: string, args: ..any) {
+	p_init(&p, u, &l, proc(w_raw: rawptr, t: Token, format: string, args: ..any) {
 		w := (^io.Writer)(w_raw)^
 
 		temp := TEMP_ALLOCATOR_GUARD()
@@ -164,7 +164,32 @@ codegen_full :: proc(s: string, w: io.Writer) -> int {
 
 	total_errors := l.errors + p.errors
 
-	if total_errors > 0 {
+	return total_errors
+}
+
+
+tacky_gen_full :: proc(s: string, w: io.Writer) -> int {
+	w := w
+
+	u: Unit
+	total_errors := parse_ast(s, &u, w)
+	if 0 < total_errors {
+		return total_errors
+	}
+
+	tacky_u: Tacky_Unit
+	tacky_gen(&u, &tacky_u)
+
+	tacky_unit_write_human_readable(&tacky_u, w)
+	return 0
+}
+
+codegen_full :: proc(s: string, w: io.Writer) -> int {
+	w := w
+
+	u: Unit
+	total_errors := parse_ast(s, &u, w)
+	if 0 < total_errors {
 		return total_errors
 	}
 
@@ -225,6 +250,7 @@ main :: proc() {
 		Emit,
 		Lex,
 		Parse,
+		Tacky_Gen,
 		Codegen,
 	}
 
@@ -240,6 +266,14 @@ main :: proc() {
 			os.exit(1)
 		}
 		stage = .Parse
+	}
+
+	if f.tacky {
+		if stage != .Emit {
+			log.fatalf("multiple stage specifiers found, while only one at the time is supported")
+			os.exit(1)
+		}
+		stage = .Tacky_Gen
 	}
 
 	if f.codegen {
@@ -259,6 +293,10 @@ main :: proc() {
 		}
 	case .Parse:
 		if 0 < parse_full(output, os.to_stream(os.stdout)) {
+			os.exit(1)
+		}
+	case .Tacky_Gen:
+		if 0 < tacky_gen_full(output, os.to_stream(os.stdout)) {
 			os.exit(1)
 		}
 	case .Codegen:

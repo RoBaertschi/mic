@@ -34,28 +34,56 @@ asm_allocator :: proc(u: ^Asm_Unit) -> mem.Allocator {
 Asm_Instructions :: xar.Array(Asm_Inst, 8)
 
 Asm_Def_Function :: struct {
-	name:         string,
-	instructions: Asm_Instructions,
+	name:           string,
+	largest_pseudo: Asm_Pseudo,
+	instructions:   Asm_Instructions,
 }
 
-Asm_Inst :: union { Asm_Inst_Mov, Asm_Inst_Ret }
+Asm_Inst :: union { Asm_Inst_Mov, Asm_Inst_Unary, Asm_Inst_Allocate_Stack, Asm_Inst_Ret }
 
 Asm_Inst_Mov :: struct {
 	src, dst: Asm_Operand,
 }
+
+Asm_Inst_Unary :: struct {
+	operator: Asm_Unary_Operator,
+	operand:  Asm_Operand,
+}
+
+Asm_Unary_Operator :: enum {
+	Neg,
+	Not,
+}
+
+tacky_unary_operator_to_asm_unary_operator :: proc(op: Tacky_Unary_Operator) -> Asm_Unary_Operator {
+	switch op {
+	case .Complement:
+		return .Not
+	case .Negate:
+		return .Neg
+	}
+	fmt.panicf("invalid operator in tacky_unary_operator_to_asm_unary_operator: %v", op)
+}
+
+Asm_Inst_Allocate_Stack :: distinct int
 
 Asm_Inst_Ret :: struct {}
 
 Asm_Operand :: union {
 	Asm_Immediate,
 	Asm_Register,
+	Asm_Pseudo,
+	Asm_Stack,
 }
 
 Asm_Register :: enum {
-	Eax,
+	AX,
+	R10,
 }
 
 Asm_Immediate :: distinct int
+Asm_Pseudo    :: distinct int
+Asm_Stack     :: distinct int
 
 asm_unit_write_human_readable :: proc(u: ^Asm_Unit, w: io.Writer) {
 	fmt.wprintf(w, "Asm_Unit {{\n Function %q {{\n", u.function.name)
@@ -68,11 +96,18 @@ asm_unit_write_human_readable :: proc(u: ^Asm_Unit, w: io.Writer) {
 			io.write_string(w, " -> ")
 			asm_operand_write_human_readable(i.dst, w)
 			io.write_string(w, "\n")
+		case Asm_Inst_Unary:
+			fmt.wprintf(w, "  unary.%v ", i.operator)
+			asm_operand_write_human_readable(i.operand, w)
+			io.write_string(w, "\n")
+		case Asm_Inst_Allocate_Stack:
+			fmt.wprintf(w, "  allocate_stack %v\n", i)
 		case Asm_Inst_Ret:
 			io.write_string(w, "  ret\n")
 		}
 
 	}
+
 	io.write_string(w, " }\n}\n")
 }
 
@@ -81,45 +116,10 @@ asm_operand_write_human_readable :: proc(operand: Asm_Operand, w: io.Writer) {
 	case Asm_Immediate:
 		io.write_int(w, int(op))
 	case Asm_Register:
-		switch op {
-		case .Eax:
-			io.write_string(w, "Register.Eax")
-		}
+		fmt.wprintf(w, "Register.%v", op)
+	case Asm_Pseudo:
+		fmt.wprintf(w, "%%%v", op)
+	case Asm_Stack:
+		fmt.wprintf(w, "Stack(%v)", op)
 	}
-}
-
-// TODO(robin): temporary, will be removed when Tacky will be added
-
-asm_emit :: proc(in_u: ^Unit, out_u: ^Asm_Unit) {
-	function      := asm_new(out_u, Asm_Def_Function)
-	function.name  = asm_clone_string(out_u, in_u.function.name.ident)
-	xar.init(&function.instructions, asm_allocator(out_u))
-
-	asm_emit_body(&function.instructions, in_u.function.body)
-	out_u.function = function
-}
-
-asm_emit_body :: proc(i: ^Asm_Instructions, body: ^Ast_Stmt) {
-	switch b in body.variant {
-	case ^Ast_Stmt_Error: panic("Error stmt")
-	case ^Ast_Stmt_Return:
-		operand := asm_emit_expr(b.result, i)
-		xar.push_back(
-			i,
-			Asm_Inst_Mov{ src = operand, dst = .Eax },
-			Asm_Inst_Ret{},
-		)
-	}
-}
-
-asm_emit_expr :: proc(expr: ^Ast_Expr, i: ^Asm_Instructions) -> Asm_Operand {
-	switch e in expr.variant {
-	case nil:             panic("nil expr")
-	case ^Ast_Expr_Error: panic("Error expr")
-	case ^Ast_Expr_Constant:
-		return Asm_Immediate(e.value)
-	case ^Ast_Expr_Unary:
-		unimplemented()
-	}
-	fmt.panicf("missing case %v", expr.variant)
 }
