@@ -6,10 +6,18 @@ import "core:strconv"
 
 P_Precedence :: enum {
 	Lowest,
+	Sum,
+	Product,
 	Prefix,
 }
 
-p_precedences := #partial [Token_Kind]P_Precedence {}
+p_precedences := #partial [Token_Kind]P_Precedence {
+	.Plus          = .Sum,
+	.Hyphen        = .Sum,
+	.Asterisk      = .Product,
+	.Forward_Slash = .Product,
+	.Precent       = .Product,
+}
 
 P_Prefix_Proc :: #type proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool)
 
@@ -22,7 +30,13 @@ p_prefix_procs := #partial [Token_Kind]P_Prefix_Proc {
 
 P_Infix_Proc :: #type proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool)
 
-p_infix_procs := #partial [Token_Kind]P_Infix_Proc {}
+p_infix_procs := #partial [Token_Kind]P_Infix_Proc {
+	.Plus          = p_parse_binary,
+	.Hyphen        = p_parse_binary,
+	.Asterisk      = p_parse_binary,
+	.Forward_Slash = p_parse_binary,
+	.Precent       = p_parse_binary,
+}
 
 P_Error_Proc :: #type proc(data: rawptr, t: Token, format: string, args: ..any)
 
@@ -85,6 +99,10 @@ p_expect_peek :: proc(p: ^Parser, peek: Token_Kind) -> (t: Token, ok: bool) {
 
 p_peek_prec :: proc(p: ^Parser) -> P_Precedence {
 	return p_precedences[p.peek_token.kind]
+}
+
+p_current_prec :: proc(p: ^Parser) -> P_Precedence {
+	return p_precedences[p.current_token.kind]
 }
 
 p_parse_unit :: proc(p: ^Parser) {
@@ -244,7 +262,27 @@ p_parse_unary :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
 	return
 }
 
-p_parse_constant : P_Prefix_Proc : proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
+p_parse_binary :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool) {
+	binary_expr     := ast_new(p.u, p.current_token, Ast_Expr_Binary)
+	expr             = binary_expr
+	binary_expr.lhs  = lhs
+
+	#partial switch p.current_token.kind {
+	case .Asterisk:      binary_expr.operator = .Multiply
+	case .Forward_Slash: binary_expr.operator = .Divide
+	case .Precent:       binary_expr.operator = .Remainder
+	case .Plus:          binary_expr.operator = .Add
+	case .Hyphen:        binary_expr.operator = .Subtract
+	case:                fmt.panicf("invalid token kind for p_parse_binary: %v", p.current_token.kind)
+	}
+
+	prec := p_current_prec(p)
+	p_next_token(p)
+	binary_expr.rhs, ok = p_parse_expr(p, prec)
+	return
+}
+
+p_parse_constant :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
 	token: Token
 	token, ok = p_expect(p, .Constant)
 	if !ok {

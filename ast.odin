@@ -65,7 +65,7 @@ Ast_Stmt_Return :: struct {
 Ast_Expr :: struct {
 	t: Token,
 
-	variant: union { ^Ast_Expr_Error, ^Ast_Expr_Constant, ^Ast_Expr_Unary },
+	variant: union { ^Ast_Expr_Error, ^Ast_Expr_Constant, ^Ast_Expr_Unary, ^Ast_Expr_Binary },
 }
 
 Ast_Expr_Error :: struct { using expr: Ast_Expr }
@@ -90,6 +90,21 @@ Ast_Expr_Unary :: struct {
 
 	operator: Ast_Unary_Operator,
 	inner:    ^Ast_Expr,
+}
+
+Ast_Binary_Operator :: enum {
+	Add,
+	Subtract,
+	Multiply,
+	Divide,
+	Remainder,
+}
+
+Ast_Expr_Binary :: struct {
+	using expr: Ast_Expr,
+
+	operator: Ast_Binary_Operator,
+	lhs, rhs: ^Ast_Expr,
 }
 
 @(private="file")
@@ -162,14 +177,15 @@ ast_expr_write_human_readable :: proc(expr: ^Ast_Expr, w: io.Writer, depth: int)
 	case ^Ast_Expr_Constant:
 		io.write_int(w, e.value)
 	case ^Ast_Expr_Unary:
-		switch e.operator {
-		case .Complement:
-			io.write_rune(w, '~')
-		case .Negate:
-			io.write_rune(w, '-')
-		}
+		io.write_string(w, e.t.content)
 		io.write_rune(w, '(')
 		ast_expr_write_human_readable(e.inner, w, depth)
+		io.write_rune(w, ')')
+	case ^Ast_Expr_Binary:
+		io.write_rune(w, '(')
+		ast_expr_write_human_readable(e.lhs, w, depth)
+		io.write_string(w, e.t.content)
+		ast_expr_write_human_readable(e.rhs, w, depth)
 		io.write_rune(w, ')')
 	}
 }

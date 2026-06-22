@@ -53,6 +53,19 @@ tacky_gen_expr :: proc(u: ^Tacky_Unit, function: ^Tacky_Def_Function, expr: ^Ast
 			},
 		)
 		return dst
+	case ^Ast_Expr_Binary:
+		lhs, rhs := tacky_gen_expr(u, function, e.lhs), tacky_gen_expr(u, function, e.rhs)
+		dst      := tacky_gen_make_temporary(function)
+		tacky_gen_instructions(
+			function,
+			Tacky_Inst_Binary {
+				operator = Tacky_Binary_Operator(e.operator),
+				lhs      = lhs,
+				rhs      = rhs,
+				dst      = dst,
+			},
+		)
+		return dst
 	}
 	fmt.panicf("invalid expr %v", expr.variant)
 }

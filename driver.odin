@@ -13,11 +13,11 @@ import "core:flags"
 import "core:mem/virtual"
 
 Flags :: struct {
-	lex:     bool `usage: "only lex the provided c source file"`,
-	parse:   bool `usage: "lex and parse the provided c source file"`,
-	tacky:   bool `usage: "only generate the tacky for the provided c source file"`,
-	codegen: bool `usage: "compile the provided c source file and print the asm ir"`,
-	s:       bool `usage: "compile the provided c source file and print the asm"`,
+	lex:     bool `usage:"only lex the provided c source file"`,
+	parse:   bool `usage:"lex and parse the provided c source file"`,
+	tacky:   bool `usage:"only generate the tacky for the provided c source file"`,
+	codegen: bool `usage:"compile the provided c source file and print the asm ir"`,
+	s:       bool `usage:"compile the provided c source file and print the asm"`,
 
 	file: ^os.File `usage:"the input c source file" args:"required,pos=0"`,
 }

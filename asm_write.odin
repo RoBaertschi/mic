@@ -15,15 +15,36 @@ asm_write :: proc(u: ^Asm_Unit, w: io.Writer) {
 			io.write_string(w, ", ")
 			asm_write_operand(i.dst, w)
 			io.write_string(w, "\n")
-		case Asm_Inst_Ret:
-			io.write_string(w, "\tmovq %rbp, %rsp\n\tpopq %rbp\n\tret\n")
-		case Asm_Inst_Unary:
-			switch i.operator {
-			case .Neg:
-				io.write_string(w, "\tnegl ")
-			case .Not:
-				io.write_string(w, "\tnotl ")
+		case Asm_Inst_Plain:
+			switch i {
+			case .Ret:
+				io.write_string(w, "\tmovq %rbp, %rsp\n\tpopq %rbp\n\tret\n")
+			case .Cdq:
+				io.write_string(w, "\tcdq\n")
 			}
+		case Asm_Inst_Unary:
+			instruction_text := [Asm_Unary_Operator]string{
+				.Neg = "\tnegl ",
+				.Not = "\tnotl ",
+			}
+
+			io.write_string(w, instruction_text[i.operator])
+			asm_write_operand(i.operand, w)
+			io.write_string(w, "\n")
+		case Asm_Inst_Binary:
+			instruction_text := [Asm_Binary_Operator]string{
+				.Add  = "\taddl ",
+				.Sub  = "\tsubl ",
+				.Mult = "\timull ",
+			}
+
+			io.write_string(w, instruction_text[i.operator])
+			asm_write_operand(i.src, w)
+			io.write_string(w, ", ")
+			asm_write_operand(i.dst, w)
+			io.write_string(w, "\n")
+		case Asm_Inst_Idiv:
+			io.write_string(w, "\tidivl ")
 			asm_write_operand(i.operand, w)
 			io.write_string(w, "\n")
 		case Asm_Inst_Allocate_Stack:
@@ -44,8 +65,12 @@ asm_write_operand :: proc(operand: Asm_Operand, w: io.Writer) {
 		switch op {
 		case .AX:
 			io.write_string(w, "%eax")
+		case .DX:
+			io.write_string(w, "%edx")
 		case .R10:
 			io.write_string(w, "%r10d")
+		case .R11:
+			io.write_string(w, "%r11d")
 		}
 	case Asm_Pseudo: fmt.panicf("pseudo operand in asm write: %v", op)
 	case Asm_Stack:

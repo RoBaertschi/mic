@@ -39,7 +39,7 @@ Asm_Def_Function :: struct {
 	instructions:   Asm_Instructions,
 }
 
-Asm_Inst :: union { Asm_Inst_Mov, Asm_Inst_Unary, Asm_Inst_Allocate_Stack, Asm_Inst_Ret }
+Asm_Inst :: union { Asm_Inst_Mov, Asm_Inst_Unary, Asm_Inst_Binary, Asm_Inst_Idiv, Asm_Inst_Allocate_Stack, Asm_Inst_Plain }
 
 Asm_Inst_Mov :: struct {
 	src, dst: Asm_Operand,
@@ -65,9 +65,41 @@ tacky_unary_operator_to_asm_unary_operator :: proc(op: Tacky_Unary_Operator) -> 
 	fmt.panicf("invalid operator in tacky_unary_operator_to_asm_unary_operator: %v", op)
 }
 
+Asm_Inst_Binary :: struct {
+	operator: Asm_Binary_Operator,
+	src, dst: Asm_Operand,
+}
+
+Asm_Binary_Operator :: enum {
+	Add,
+	Sub,
+	Mult,
+}
+
+tacky_binary_operator_to_asm_unary_operator :: proc(op: Tacky_Binary_Operator) -> Asm_Binary_Operator {
+	#partial switch op {
+	case .Add:      return .Add
+	case .Subtract: return .Sub
+	case .Multiply: return .Mult
+	}
+	fmt.panicf("invalid operator in tacky_binary_operator_to_asm_unary_operator: %v", op)
+}
+
+Asm_Inst_Idiv :: struct {
+	operand: Asm_Operand,
+}
+
 Asm_Inst_Allocate_Stack :: distinct int
 
-Asm_Inst_Ret :: struct {}
+Asm_Inst_Plain :: enum {
+	Ret,
+	Cdq,
+}
+
+asm_inst_plain_string := [Asm_Inst_Plain]string{
+	.Ret = "ret",
+	.Cdq = "cdq",
+}
 
 Asm_Operand :: union {
 	Asm_Immediate,
@@ -78,7 +110,9 @@ Asm_Operand :: union {
 
 Asm_Register :: enum {
 	AX,
+	DX,
 	R10,
+	R11,
 }
 
 Asm_Immediate :: distinct int
@@ -100,10 +134,24 @@ asm_unit_write_human_readable :: proc(u: ^Asm_Unit, w: io.Writer) {
 			fmt.wprintf(w, "  unary.%v ", i.operator)
 			asm_operand_write_human_readable(i.operand, w)
 			io.write_string(w, "\n")
+		case Asm_Inst_Binary:
+			fmt.wprintf(w, "  binary.%v ", i.operator)
+			asm_operand_write_human_readable(i.dst, w)
+			io.write_string(w, ", ")
+			asm_operand_write_human_readable(i.src, w)
+			io.write_string(w, " -> ")
+			asm_operand_write_human_readable(i.dst, w)
+			io.write_string(w, "\n")
+		case Asm_Inst_Idiv:
+			io.write_string(w, "  idiv ")
+			asm_operand_write_human_readable(i.operand, w)
+			io.write_string(w, "\n")
 		case Asm_Inst_Allocate_Stack:
 			fmt.wprintf(w, "  allocate_stack %v\n", i)
-		case Asm_Inst_Ret:
-			io.write_string(w, "  ret\n")
+		case Asm_Inst_Plain:
+			io.write_string(w, "  ")
+			io.write_string(w, asm_inst_plain_string[i])
+			io.write_string(w, "\n")
 		}
 
 	}

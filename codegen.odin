@@ -5,6 +5,13 @@ import "core:fmt"
 import "core:container/xar"
 
 codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
+	mov :: proc(src, dst: Asm_Operand) -> Asm_Inst_Mov {
+		return Asm_Inst_Mov {
+			src = src,
+			dst = dst,
+		}
+	}
+
 	initial_gen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 		function       := asm_new(out_u, Asm_Def_Function)
 		function.name   = asm_clone_string(out_u, u.function.name)
@@ -31,26 +38,48 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 			case Tacky_Inst_Return:
 				insts(
 					function,
-					Asm_Inst_Mov {
-						src = convert_value_to_operand(function, Tacky_Value(i)),
-						dst = .AX,
-					},
-					Asm_Inst_Ret {},
+					mov(convert_value_to_operand(function, Tacky_Value(i)), .AX),
+					Asm_Inst_Plain.Ret,
 				)
 			case Tacky_Inst_Unary:
 				dst := convert_value_to_operand(function, i.dst)
 
 				insts(
 					function,
-					Asm_Inst_Mov {
-						src = convert_value_to_operand(function, i.src),
-						dst = dst,
-					},
+					mov(convert_value_to_operand(function, i.src), dst),
 					Asm_Inst_Unary {
 						operand  = dst,
 						operator = tacky_unary_operator_to_asm_unary_operator(i.operator),
 					},
 				)
+			case Tacky_Inst_Binary:
+				switch i.operator {
+				case .Multiply, .Add, .Subtract:
+					dst := convert_value_to_operand(function, i.dst)
+					insts(
+						function,
+						mov(convert_value_to_operand(function, i.lhs), dst),
+						Asm_Inst_Binary {
+							operator = tacky_binary_operator_to_asm_unary_operator(i.operator),
+							dst      = dst,
+							src      = convert_value_to_operand(function, i.rhs),
+						},
+					)
+				case .Divide, .Remainder:
+					dst := convert_value_to_operand(function, i.dst)
+					insts(
+						function,
+						mov(convert_value_to_operand(function, i.lhs), .AX),
+						.Cdq,
+						Asm_Inst_Idiv {
+							operand = convert_value_to_operand(function, i.rhs),
+						},
+						mov(
+							.AX if i.operator == .Divide else .DX,
+							dst,
+						),
+					)
+				}
 			}
 		}
 	}
@@ -82,8 +111,12 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 				replace_operand(&i.dst, pseudo_to_stack_table, &current_stack_depth)
 			case Asm_Inst_Unary:
 				replace_operand(&i.operand, pseudo_to_stack_table, &current_stack_depth)
-			case Asm_Inst_Allocate_Stack:
-			case Asm_Inst_Ret:
+			case Asm_Inst_Binary:
+				replace_operand(&i.src, pseudo_to_stack_table, &current_stack_depth)
+				replace_operand(&i.dst, pseudo_to_stack_table, &current_stack_depth)
+			case Asm_Inst_Idiv:
+				replace_operand(&i.operand, pseudo_to_stack_table, &current_stack_depth)
+			case Asm_Inst_Allocate_Stack, Asm_Inst_Plain:
 			}
 		}
 
@@ -104,13 +137,60 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 				if src_ok && dst_ok {
 					xar.append(
 						&new_instructions,
-						Asm_Inst_Mov { src = src,              dst = Asm_Register.R10 },
-						Asm_Inst_Mov { src = Asm_Register.R10, dst = dst },
+						mov(src, .R10),
+						mov(.R10, dst),
 					)
 				} else {
 					xar.append(&new_instructions, i)
 				}
-			case Asm_Inst_Ret, Asm_Inst_Allocate_Stack, Asm_Inst_Unary:
+			case Asm_Inst_Binary:
+				if (i.operator in bit_set[Asm_Binary_Operator]{.Add, .Sub}) {
+					src, src_ok := i.src.(Asm_Stack)
+					dst, dst_ok := i.dst.(Asm_Stack)
+					if src_ok && dst_ok {
+						xar.append(
+							&new_instructions,
+							mov(src, .R10),
+							Asm_Inst_Binary {
+								operator = i.operator,
+								src      = Asm_Register.R10,
+								dst      = dst,
+							},
+						)
+					} else {
+						xar.append(&new_instructions, i)
+					}
+				} else {
+					dst, dst_ok := i.dst.(Asm_Stack)
+					if dst_ok {
+						xar.append(
+							&new_instructions,
+							mov(dst, .R11),
+							Asm_Inst_Binary {
+								operator = i.operator,
+								src = i.src,
+								dst = .R11,
+							},
+							mov(.R11, dst),
+						)
+					} else {
+						xar.append(&new_instructions, i)
+					}
+				}
+			case Asm_Inst_Idiv:
+				operand, operand_ok := i.operand.(Asm_Immediate)
+				if operand_ok {
+					xar.append(
+						&new_instructions,
+						mov(operand, .R10),
+						Asm_Inst_Idiv {
+							operand = .R10,
+						},
+					)
+				} else {
+					xar.append(&new_instructions, i)
+				}
+			case Asm_Inst_Plain, Asm_Inst_Allocate_Stack, Asm_Inst_Unary:
 				xar.append(&new_instructions, i)
 			}
 		}
