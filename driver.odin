@@ -13,10 +13,11 @@ import "core:flags"
 import "core:mem/virtual"
 
 Flags :: struct {
-	lex:      bool `usage:"only lex the provided c source file"`,
-	parse:    bool `usage:"lex and parse the provided c source file"`,
-	tacky:    bool `usage:"only generate the tacky for the provided c source file"`,
-	codegen:  bool `usage:"compile the provided c source file"`,
+	lex:     bool `usage: "only lex the provided c source file"`,
+	parse:   bool `usage: "lex and parse the provided c source file"`,
+	tacky:   bool `usage: "only generate the tacky for the provided c source file"`,
+	codegen: bool `usage: "compile the provided c source file and print the asm ir"`,
+	s:       bool `usage: "compile the provided c source file and print the asm"`,
 
 	file: ^os.File `usage:"the input c source file" args:"required,pos=0"`,
 }
@@ -193,8 +194,11 @@ codegen_full :: proc(s: string, w: io.Writer) -> int {
 		return total_errors
 	}
 
+	tacky_u: Tacky_Unit
+	tacky_gen(&u, &tacky_u)
+
 	asm_u: Asm_Unit
-	asm_emit(&u, &asm_u)
+	codegen(&tacky_u, &asm_u)
 
 	asm_unit_write_human_readable(&asm_u, w)
 
@@ -230,8 +234,11 @@ emit_full :: proc(s: string, w: io.Writer) -> int {
 		return total_errors
 	}
 
+	tacky_u: Tacky_Unit
+	tacky_gen(&u, &tacky_u)
+
 	asm_u: Asm_Unit
-	asm_emit(&u, &asm_u)
+	codegen(&tacky_u, &asm_u)
 
 	asm_write(&asm_u, w)
 
@@ -252,6 +259,7 @@ main :: proc() {
 		Parse,
 		Tacky_Gen,
 		Codegen,
+		Asm_Source,
 	}
 
 	stage: Stage
@@ -284,6 +292,14 @@ main :: proc() {
 		stage = .Codegen
 	}
 
+	if f.s {
+		if stage != .Emit {
+			log.fatalf("multiple stage specifiers found, while only one at the time is supported")
+			os.exit(1)
+		}
+		stage = .Asm_Source
+	}
+
 	output := preprocess(f.file, temp)
 
 	switch stage {
@@ -301,6 +317,10 @@ main :: proc() {
 		}
 	case .Codegen:
 		if 0 < codegen_full(output, os.to_stream(os.stdout)) {
+			os.exit(1)
+		}
+	case .Asm_Source:
+		if 0 < emit_full(output, os.to_stream(os.stdout)) {
 			os.exit(1)
 		}
 	case .Emit:
