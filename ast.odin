@@ -96,6 +96,11 @@ Ast_Binary_Operator :: enum {
 	Add,
 	Subtract,
 	Multiply,
+	And,
+	Or,
+	Xor,
+	Left_Shift,
+	Right_Shift,
 	Divide,
 	Remainder,
 }

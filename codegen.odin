@@ -54,7 +54,8 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 				)
 			case Tacky_Inst_Binary:
 				switch i.operator {
-				case .Multiply, .Add, .Subtract:
+				case .Multiply, .Add, .Subtract, .And,
+					 .Or, .Xor, .Left_Shift, .Right_Shift:
 					dst := convert_value_to_operand(function, i.dst)
 					insts(
 						function,
@@ -69,7 +70,7 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 					dst := convert_value_to_operand(function, i.dst)
 					insts(
 						function,
-						mov(convert_value_to_operand(function, i.lhs), .AX),
+						mov(convert_value_to_operand(function, i.lhs), .DX),
 						.Cdq,
 						Asm_Inst_Idiv {
 							operand = convert_value_to_operand(function, i.rhs),

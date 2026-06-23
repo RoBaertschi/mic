@@ -6,17 +6,27 @@ import "core:strconv"
 
 P_Precedence :: enum {
 	Lowest,
+	Bitwise_Or,
+	Bitwise_Xor,
+	Bitwise_And,
+	// ordered
+	Shift,
 	Sum,
 	Product,
 	Prefix,
 }
 
 p_precedences := #partial [Token_Kind]P_Precedence {
-	.Plus          = .Sum,
-	.Hyphen        = .Sum,
-	.Asterisk      = .Product,
-	.Forward_Slash = .Product,
-	.Precent       = .Product,
+	.Pipe                = .Bitwise_Or,
+	.Caret               = .Bitwise_Xor,
+	.Ampersand           = .Bitwise_And,
+	.Double_Less_Than    = .Shift,
+	.Double_Greater_Than = .Shift,
+	.Plus                = .Sum,
+	.Hyphen              = .Sum,
+	.Asterisk            = .Product,
+	.Forward_Slash       = .Product,
+	.Precent             = .Product,
 }
 
 P_Prefix_Proc :: #type proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool)
@@ -31,11 +41,16 @@ p_prefix_procs := #partial [Token_Kind]P_Prefix_Proc {
 P_Infix_Proc :: #type proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool)
 
 p_infix_procs := #partial [Token_Kind]P_Infix_Proc {
-	.Plus          = p_parse_binary,
-	.Hyphen        = p_parse_binary,
-	.Asterisk      = p_parse_binary,
-	.Forward_Slash = p_parse_binary,
-	.Precent       = p_parse_binary,
+	.Plus                = p_parse_binary,
+	.Hyphen              = p_parse_binary,
+	.Asterisk            = p_parse_binary,
+	.Forward_Slash       = p_parse_binary,
+	.Precent             = p_parse_binary,
+	.Ampersand           = p_parse_binary,
+	.Pipe                = p_parse_binary,
+	.Caret               = p_parse_binary,
+	.Double_Less_Than    = p_parse_binary,
+	.Double_Greater_Than = p_parse_binary,
 }
 
 P_Error_Proc :: #type proc(data: rawptr, t: Token, format: string, args: ..any)
@@ -268,12 +283,17 @@ p_parse_binary :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool
 	binary_expr.lhs  = lhs
 
 	#partial switch p.current_token.kind {
-	case .Asterisk:      binary_expr.operator = .Multiply
-	case .Forward_Slash: binary_expr.operator = .Divide
-	case .Precent:       binary_expr.operator = .Remainder
-	case .Plus:          binary_expr.operator = .Add
-	case .Hyphen:        binary_expr.operator = .Subtract
-	case:                fmt.panicf("invalid token kind for p_parse_binary: %v", p.current_token.kind)
+	case .Asterisk:            binary_expr.operator = .Multiply
+	case .Forward_Slash:       binary_expr.operator = .Divide
+	case .Precent:             binary_expr.operator = .Remainder
+	case .Plus:                binary_expr.operator = .Add
+	case .Hyphen:              binary_expr.operator = .Subtract
+	case .Ampersand:           binary_expr.operator = .And
+	case .Pipe:                binary_expr.operator = .Or
+	case .Caret:               binary_expr.operator = .Xor
+	case .Double_Less_Than:    binary_expr.operator = .Left_Shift
+	case .Double_Greater_Than: binary_expr.operator = .Right_Shift
+	case:                      fmt.panicf("invalid token kind for p_parse_binary: %v", p.current_token.kind)
 	}
 
 	prec := p_current_prec(p)

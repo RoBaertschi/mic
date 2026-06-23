@@ -74,13 +74,23 @@ Asm_Binary_Operator :: enum {
 	Add,
 	Sub,
 	Mult,
+	And,
+	Or,
+	Xor,
+	Sal,
+	Sar,
 }
 
 tacky_binary_operator_to_asm_unary_operator :: proc(op: Tacky_Binary_Operator) -> Asm_Binary_Operator {
 	#partial switch op {
-	case .Add:      return .Add
-	case .Subtract: return .Sub
-	case .Multiply: return .Mult
+	case .Add:         return .Add
+	case .Subtract:    return .Sub
+	case .Multiply:    return .Mult
+	case .And:         return .And
+	case .Or:          return .Or
+	case .Xor:         return .Xor
+	case .Left_Shift:  return .Sal
+	case .Right_Shift: return .Sar
 	}
 	fmt.panicf("invalid operator in tacky_binary_operator_to_asm_unary_operator: %v", op)
 }

@@ -7,18 +7,23 @@ Token_Kind :: enum {
 	Invalid,
 	EOF,
 
-	Open_Paren,   // (
-	Close_Paren,  // )
-	Open_Brace,   // {
-	Close_Brace,  // }
-	Semicolon,    // ;
-	Tilde,        // ~
-	Hyphen,       // -
-	Two_Hyphen,   // --
-	Plus,         // +
-	Asterisk,     // *
-	Forward_Slash, // /
-	Precent,      // %
+	Open_Paren,          // (
+	Close_Paren,         // )
+	Open_Brace,          // {
+	Close_Brace,         // }
+	Semicolon,           // ;
+	Tilde,               // ~
+	Hyphen,              // -
+	Two_Hyphen,          // --
+	Plus,                // +
+	Asterisk,            // *
+	Forward_Slash,       // /
+	Precent,             // %
+	Ampersand,           // &
+	Pipe,                // |
+	Caret,               // ^
+	Double_Less_Than,    // <<
+	Double_Greater_Than, // >>
 
 	Identifier,
 	Constant,
@@ -180,7 +185,21 @@ l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 	case '*':           t.kind = .Asterisk
 	case '/':           t.kind = .Forward_Slash
 	case '%':           t.kind = .Precent
+	case '^':           t.kind = .Caret
+	case '&':           t.kind = .Ampersand
+	case '|':           t.kind = .Pipe
 	case utf8.RUNE_EOF: t.kind = .EOF
+
+	case '<':
+		if l_peek_ch(l) == '<' {
+			l_next_ch(l)
+			t.kind = .Double_Less_Than
+		}
+	case '>':
+		if l_peek_ch(l) == '>' {
+			l_next_ch(l)
+			t.kind = .Double_Greater_Than
+		}
 
 	case '-':
 		if l_peek_ch(l) == '-' {

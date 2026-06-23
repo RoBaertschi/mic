@@ -36,6 +36,11 @@ asm_write :: proc(u: ^Asm_Unit, w: io.Writer) {
 				.Add  = "\taddl ",
 				.Sub  = "\tsubl ",
 				.Mult = "\timull ",
+				.And  = "\tandl ",
+				.Or   = "\torl ",
+				.Xor  = "\txorl ",
+				.Sal  = "\tsall ",
+				.Sar  = "\tsarl ",
 			}
 
 			io.write_string(w, instruction_text[i.operator])
