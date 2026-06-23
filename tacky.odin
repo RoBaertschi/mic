@@ -36,6 +36,7 @@ Tacky_Instructions :: xar.Array(Tacky_Inst, 8)
 Tacky_Def_Function :: struct {
 	name:         string,
 	locals:       Tacky_Value_Variable,
+	labels:       Tacky_Label,
 	instructions: Tacky_Instructions,
 }
 
@@ -43,6 +44,11 @@ Tacky_Inst :: union {
 	Tacky_Inst_Return,
 	Tacky_Inst_Unary,
 	Tacky_Inst_Binary,
+	Tacky_Inst_Copy,
+	Tacky_Inst_Jump,
+	Tacky_Inst_Jump_If_Zero,
+	Tacky_Inst_Jump_If_Not_Zero,
+	Tacky_Inst_Label, // TODO(robin): use some block based ssa maybe instead of labels
 }
 
 Tacky_Inst_Return :: distinct Tacky_Value
@@ -54,12 +60,49 @@ Tacky_Inst_Unary :: struct {
 	src, dst: Tacky_Value,
 }
 
-Tacky_Binary_Operator :: distinct Ast_Binary_Operator
+Tacky_Binary_Operator :: enum {
+	Add,
+	Subtract,
+	Multiply,
+	Divide,
+	Remainder,
+	Bitwise_And,
+	Bitwise_Or,
+	Bitwise_Xor,
+	Left_Shift,
+	Right_Shift,
+	Equal,
+	Not_Equal,
+	Less_Than,
+	Less_Or_Equal,
+	Greater_Than,
+	Greater_Or_Equal,
+}
 
 Tacky_Inst_Binary :: struct {
 	operator:      Tacky_Binary_Operator,
 	lhs, rhs, dst: Tacky_Value,
 }
+
+Tacky_Inst_Copy :: struct {
+	src, dst: Tacky_Value,
+}
+
+Tacky_Label :: distinct u32
+
+Tacky_Inst_Jump :: struct {
+	target: Tacky_Label,
+}
+
+Tacky_Inst_Jump_If :: struct {
+	condition: Tacky_Value,
+	target:    Tacky_Label,
+}
+
+Tacky_Inst_Jump_If_Zero :: distinct Tacky_Inst_Jump_If
+Tacky_Inst_Jump_If_Not_Zero :: distinct Tacky_Inst_Jump_If
+
+Tacky_Inst_Label :: Tacky_Label
 
 Tacky_Value :: union { Tacky_Value_Constant, Tacky_Value_Variable }
 
@@ -89,6 +132,28 @@ tacky_unit_write_human_readable :: proc(u: ^Tacky_Unit, w: io.Writer) {
 			io.write_string(w, ", ")
 			tacky_value_write_human_readable(i.rhs, w)
 			io.write_string(w, "\n")
+		case Tacky_Inst_Copy:
+			io.write_string(w, "  ")
+			tacky_value_write_human_readable(i.dst, w)
+			io.write_string(w, " = ")
+			tacky_value_write_human_readable(i.src, w)
+			io.write_string(w, "\n")
+		case Tacky_Inst_Jump:
+			fmt.wprintf(w, "  jump @%v\n", i.target)
+		case Tacky_Inst_Jump_If_Zero:
+			io.write_string(w, "  jump_if_zero ")
+			tacky_value_write_human_readable(i.condition, w)
+			io.write_string(w, ", @")
+			io.write_u64(w, u64(i.target))
+			io.write_string(w, "\n")
+		case Tacky_Inst_Jump_If_Not_Zero:
+			io.write_string(w, "  jump_if_not_zero ")
+			tacky_value_write_human_readable(i.condition, w)
+			io.write_string(w, ", @")
+			io.write_u64(w, u64(i.target))
+			io.write_string(w, "\n")
+		case Tacky_Label:
+			fmt.wprintf(w, "  @%v:\n", i)
 		}
 	}
 

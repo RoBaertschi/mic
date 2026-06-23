@@ -34,12 +34,24 @@ asm_allocator :: proc(u: ^Asm_Unit) -> mem.Allocator {
 Asm_Instructions :: xar.Array(Asm_Inst, 8)
 
 Asm_Def_Function :: struct {
-	name:           string,
-	largest_pseudo: Asm_Pseudo,
-	instructions:   Asm_Instructions,
+	name:         string,
+	pseudo_count: int,
+	instructions: Asm_Instructions,
 }
 
-Asm_Inst :: union { Asm_Inst_Mov, Asm_Inst_Unary, Asm_Inst_Binary, Asm_Inst_Idiv, Asm_Inst_Allocate_Stack, Asm_Inst_Plain }
+Asm_Inst :: union {
+	Asm_Inst_Mov,
+	Asm_Inst_Unary,
+	Asm_Inst_Binary,
+	Asm_Inst_Idiv,
+	Asm_Inst_Cmp,
+	Asm_Inst_Jmp,
+	Asm_Inst_Jmp_CC,
+	Asm_Inst_Set_CC,
+	Asm_Inst_Label,
+	Asm_Inst_Allocate_Stack,
+	Asm_Inst_Plain,
+}
 
 Asm_Inst_Mov :: struct {
 	src, dst: Asm_Operand,
@@ -57,10 +69,9 @@ Asm_Unary_Operator :: enum {
 
 tacky_unary_operator_to_asm_unary_operator :: proc(op: Tacky_Unary_Operator) -> Asm_Unary_Operator {
 	switch op {
-	case .Complement:
-		return .Not
-	case .Negate:
-		return .Neg
+	case .Complement: return .Not
+	case .Negate:     return .Neg
+	case .Not:        fmt.panicf("unsupported unary operator in tacky_unary_operator_to_asm_unary_operator: %v", op)
 	}
 	fmt.panicf("invalid operator in tacky_unary_operator_to_asm_unary_operator: %v", op)
 }
@@ -86,9 +97,9 @@ tacky_binary_operator_to_asm_unary_operator :: proc(op: Tacky_Binary_Operator) -
 	case .Add:         return .Add
 	case .Subtract:    return .Sub
 	case .Multiply:    return .Mult
-	case .And:         return .And
-	case .Or:          return .Or
-	case .Xor:         return .Xor
+	case .Bitwise_And: return .And
+	case .Bitwise_Or:  return .Or
+	case .Bitwise_Xor: return .Xor
 	case .Left_Shift:  return .Sal
 	case .Right_Shift: return .Sar
 	}
@@ -98,6 +109,46 @@ tacky_binary_operator_to_asm_unary_operator :: proc(op: Tacky_Binary_Operator) -
 Asm_Inst_Idiv :: struct {
 	operand: Asm_Operand,
 }
+
+Asm_Inst_Cmp :: struct {
+	lhs, rhs: Asm_Operand,
+}
+
+Asm_Label :: distinct Tacky_Label
+
+Asm_Inst_Jmp :: struct {
+	target: Asm_Label,
+}
+
+Asm_Condition_Code :: enum {
+	E,
+	NE,
+	G,
+	GE,
+	L,
+	LE,
+}
+
+asm_condition_code_lower_case := [Asm_Condition_Code]string {
+	.E  = "e",
+	.NE = "ne",
+	.G  = "g",
+	.GE = "ge",
+	.L  = "l",
+	.LE = "le",
+}
+
+Asm_Inst_Jmp_CC :: struct {
+	code:   Asm_Condition_Code,
+	target: Asm_Label,
+}
+
+Asm_Inst_Set_CC :: struct {
+	code:    Asm_Condition_Code,
+	operand: Asm_Operand,
+}
+
+Asm_Inst_Label :: Asm_Label
 
 Asm_Inst_Allocate_Stack :: distinct int
 
@@ -120,13 +171,14 @@ Asm_Operand :: union {
 
 Asm_Register :: enum {
 	AX,
+	CX,
 	DX,
 	R10,
 	R11,
 }
 
 Asm_Immediate :: distinct int
-Asm_Pseudo    :: distinct int
+Asm_Pseudo    :: distinct Tacky_Value_Variable
 Asm_Stack     :: distinct int
 
 asm_unit_write_human_readable :: proc(u: ^Asm_Unit, w: io.Writer) {
@@ -162,6 +214,32 @@ asm_unit_write_human_readable :: proc(u: ^Asm_Unit, w: io.Writer) {
 			io.write_string(w, "  ")
 			io.write_string(w, asm_inst_plain_string[i])
 			io.write_string(w, "\n")
+		case Asm_Inst_Cmp:
+			io.write_string(w, "  cmp ")
+			asm_operand_write_human_readable(i.lhs, w)
+			io.write_string(w, ", ")
+			asm_operand_write_human_readable(i.rhs, w)
+			io.write_string(w, "\n")
+		case Asm_Inst_Jmp:
+			io.write_string(w, "  jmp @")
+			io.write_u64(w, u64(i.target))
+			io.write_string(w, "\n")
+		case Asm_Inst_Jmp_CC:
+			io.write_string(w, "  j")
+			io.write_string(w, asm_condition_code_lower_case[i.code])
+			io.write_string(w, " @")
+			io.write_u64(w, u64(i.target))
+			io.write_string(w, "\n")
+		case Asm_Inst_Set_CC:
+			io.write_string(w, "  set")
+			io.write_string(w, asm_condition_code_lower_case[i.code])
+			io.write_string(w, " ")
+			asm_operand_write_human_readable(i.operand, w)
+			io.write_string(w, "\n")
+		case Asm_Label:
+			io.write_string(w, "  @")
+			io.write_u64(w, u64(i))
+			io.write_string(w, ":\n")
 		}
 
 	}

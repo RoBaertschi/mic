@@ -6,10 +6,13 @@ import "core:strconv"
 
 P_Precedence :: enum {
 	Lowest,
+	Or,
+	And,
 	Bitwise_Or,
 	Bitwise_Xor,
 	Bitwise_And,
-	// ordered
+	Equal,   // ==, !=
+	Ordered, // <, <=, >, >=
 	Shift,
 	Sum,
 	Product,
@@ -17,9 +20,17 @@ P_Precedence :: enum {
 }
 
 p_precedences := #partial [Token_Kind]P_Precedence {
+	.Double_Pipe         = .Or,
+	.Double_Ampersand    = .And,
 	.Pipe                = .Bitwise_Or,
 	.Caret               = .Bitwise_Xor,
 	.Ampersand           = .Bitwise_And,
+	.Double_Equal        = .Equal,
+	.Exclamation_Equal   = .Equal,
+	.Less_Than           = .Ordered,
+	.Less_Than_Equal     = .Ordered,
+	.Greater_Than        = .Ordered,
+	.Greater_Than_Equal  = .Ordered,
 	.Double_Less_Than    = .Shift,
 	.Double_Greater_Than = .Shift,
 	.Plus                = .Sum,
@@ -32,10 +43,11 @@ p_precedences := #partial [Token_Kind]P_Precedence {
 P_Prefix_Proc :: #type proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool)
 
 p_prefix_procs := #partial [Token_Kind]P_Prefix_Proc {
-	.Constant   = p_parse_constant,
-	.Hyphen     = p_parse_unary,
-	.Tilde      = p_parse_unary,
-	.Open_Paren = p_parse_grouped_expression,
+	.Constant    = p_parse_constant,
+	.Hyphen      = p_parse_unary,
+	.Tilde       = p_parse_unary,
+	.Exclamation = p_parse_unary,
+	.Open_Paren  = p_parse_grouped_expression,
 }
 
 P_Infix_Proc :: #type proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool)
@@ -51,6 +63,14 @@ p_infix_procs := #partial [Token_Kind]P_Infix_Proc {
 	.Caret               = p_parse_binary,
 	.Double_Less_Than    = p_parse_binary,
 	.Double_Greater_Than = p_parse_binary,
+	.Double_Ampersand    = p_parse_binary,
+	.Double_Pipe         = p_parse_binary,
+	.Double_Equal        = p_parse_binary,
+	.Exclamation_Equal   = p_parse_binary,
+	.Less_Than           = p_parse_binary,
+	.Less_Than_Equal     = p_parse_binary,
+	.Greater_Than        = p_parse_binary,
+	.Greater_Than_Equal  = p_parse_binary,
 }
 
 P_Error_Proc :: #type proc(data: rawptr, t: Token, format: string, args: ..any)
@@ -264,12 +284,10 @@ p_parse_unary :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
 	expr = unary_expr
 
 	#partial switch p.current_token.kind {
-	case .Hyphen:
-		unary_expr.operator = .Negate
-	case .Tilde:
-		unary_expr.operator = .Complement
-	case:
-		fmt.panicf("invalid token kind for p_parse_unary: %v", p.current_token.kind)
+	case .Hyphen:      unary_expr.operator = .Negate
+	case .Tilde:       unary_expr.operator = .Complement
+	case .Exclamation: unary_expr.operator = .Not
+	case:              fmt.panicf("invalid token kind for p_parse_unary: %v", p.current_token.kind)
 	}
 
 	p_next_token(p)
@@ -288,11 +306,19 @@ p_parse_binary :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool
 	case .Precent:             binary_expr.operator = .Remainder
 	case .Plus:                binary_expr.operator = .Add
 	case .Hyphen:              binary_expr.operator = .Subtract
-	case .Ampersand:           binary_expr.operator = .And
-	case .Pipe:                binary_expr.operator = .Or
-	case .Caret:               binary_expr.operator = .Xor
+	case .Ampersand:           binary_expr.operator = .Bitwise_And
+	case .Pipe:                binary_expr.operator = .Bitwise_Or
+	case .Caret:               binary_expr.operator = .Bitwise_Xor
 	case .Double_Less_Than:    binary_expr.operator = .Left_Shift
 	case .Double_Greater_Than: binary_expr.operator = .Right_Shift
+	case .Double_Ampersand:    binary_expr.operator = .And
+	case .Double_Pipe:         binary_expr.operator = .Or
+	case .Double_Equal:        binary_expr.operator = .Equal
+	case .Exclamation_Equal:   binary_expr.operator = .Not_Equal
+	case .Less_Than:           binary_expr.operator = .Less_Than
+	case .Less_Than_Equal:     binary_expr.operator = .Less_Or_Equal
+	case .Greater_Than:        binary_expr.operator = .Greater_Than
+	case .Greater_Than_Equal:  binary_expr.operator = .Greater_Or_Equal
 	case:                      fmt.panicf("invalid token kind for p_parse_binary: %v", p.current_token.kind)
 	}
 

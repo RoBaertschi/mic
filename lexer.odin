@@ -24,6 +24,15 @@ Token_Kind :: enum {
 	Caret,               // ^
 	Double_Less_Than,    // <<
 	Double_Greater_Than, // >>
+	Exclamation,         // !
+	Double_Ampersand,    // &&
+	Double_Pipe,         // ||
+	Double_Equal,        // ==
+	Exclamation_Equal,   // !=
+	Less_Than,           // <
+	Greater_Than,        // >
+	Less_Than_Equal,     // <=
+	Greater_Than_Equal,  // >=
 
 	Identifier,
 	Constant,
@@ -165,7 +174,7 @@ l_read_constant :: proc(l: ^Lexer) -> (t: Token) {
 l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 	l_skip_whitespace(l)
 
-	t = Token{pos = l.pos, content = l.input[l.idx:l.idx+l.ch_len]}
+	t = Token{pos = l.pos}
 
 	switch {
 	case l_is_ident_start_letter(l.ch):
@@ -186,26 +195,52 @@ l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 	case '/':           t.kind = .Forward_Slash
 	case '%':           t.kind = .Precent
 	case '^':           t.kind = .Caret
-	case '&':           t.kind = .Ampersand
-	case '|':           t.kind = .Pipe
 	case utf8.RUNE_EOF: t.kind = .EOF
 
-	case '<':
-		if l_peek_ch(l) == '<' {
+	case '&':
+		if l_peek_ch(l) == '&' {
+			t.kind = .Double_Ampersand
 			l_next_ch(l)
-			t.kind = .Double_Less_Than
+		} else {
+			t.kind = .Ampersand
+		}
+	case '|':
+		if l_peek_ch(l) == '|' {
+			t.kind = .Double_Pipe
+			l_next_ch(l)
+		} else {
+			t.kind = .Pipe
+		}
+	case '<':
+		switch l_peek_ch(l) {
+		case '<': t.kind = .Double_Less_Than; l_next_ch(l)
+		case '=': t.kind = .Less_Than_Equal;  l_next_ch(l)
+		case:     t.kind = .Less_Than
 		}
 	case '>':
-		if l_peek_ch(l) == '>' {
-			l_next_ch(l)
-			t.kind = .Double_Greater_Than
+		switch l_peek_ch(l) {
+		case '>': t.kind = .Double_Greater_Than; l_next_ch(l)
+		case '=': t.kind = .Greater_Than_Equal;  l_next_ch(l)
+		case:     t.kind = .Greater_Than
 		}
-
 	case '-':
 		if l_peek_ch(l) == '-' {
 			t.kind = .Two_Hyphen
+			l_next_ch(l)
 		} else {
 			t.kind = .Hyphen
+		}
+	case '!':
+		if l_peek_ch(l) == '=' {
+			t.kind = .Exclamation_Equal
+			l_next_ch(l)
+		} else {
+			t.kind = .Exclamation
+		}
+	case '=':
+		if l_peek_ch(l) == '=' {
+			t.kind = .Double_Equal
+			l_next_ch(l)
 		}
 	
 	case:
@@ -213,6 +248,7 @@ l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 	}
 
 	l_next_ch(l)
+	t.content = l.input[t.idx:l.idx]
 
 	return t
 }

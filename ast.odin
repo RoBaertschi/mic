@@ -83,6 +83,7 @@ Ast_Expr_Constant :: struct {
 Ast_Unary_Operator :: enum {
 	Complement,
 	Negate,
+	Not,
 }
 
 Ast_Expr_Unary :: struct {
@@ -96,13 +97,21 @@ Ast_Binary_Operator :: enum {
 	Add,
 	Subtract,
 	Multiply,
-	And,
-	Or,
-	Xor,
-	Left_Shift,
-	Right_Shift,
 	Divide,
 	Remainder,
+	Bitwise_And,
+	Bitwise_Or,
+	Bitwise_Xor,
+	Left_Shift,
+	Right_Shift,
+	And,
+	Or,
+	Equal,
+	Not_Equal,
+	Less_Than,
+	Less_Or_Equal,
+	Greater_Than,
+	Greater_Or_Equal,
 }
 
 Ast_Expr_Binary :: struct {

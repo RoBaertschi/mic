@@ -27,10 +27,14 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 				return Asm_Immediate(op)
 			case Tacky_Value_Variable:
 				pseudo := Asm_Pseudo(op)
-				function.largest_pseudo = max(function.largest_pseudo, pseudo)
+				function.pseudo_count = max(function.pseudo_count, int(pseudo)+1)
 				return pseudo
 			}
 			fmt.panicf("invalid operand %v", operand)
+		}
+
+		convert_label :: proc(label: Tacky_Label) -> Asm_Label {
+			return Asm_Label(label)
 		}
 
 		for it := xar.iterator(&u.function.instructions); inst in xar.iterate_by_val(&it) {
@@ -43,53 +47,147 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 				)
 			case Tacky_Inst_Unary:
 				dst := convert_value_to_operand(function, i.dst)
+				src := convert_value_to_operand(function, i.src)
 
-				insts(
-					function,
-					mov(convert_value_to_operand(function, i.src), dst),
-					Asm_Inst_Unary {
-						operand  = dst,
-						operator = tacky_unary_operator_to_asm_unary_operator(i.operator),
-					},
-				)
-			case Tacky_Inst_Binary:
 				switch i.operator {
-				case .Multiply, .Add, .Subtract, .And,
-					 .Or, .Xor, .Left_Shift, .Right_Shift:
-					dst := convert_value_to_operand(function, i.dst)
+				case .Complement, .Negate:
 					insts(
 						function,
-						mov(convert_value_to_operand(function, i.lhs), dst),
+						mov(src, dst),
+						Asm_Inst_Unary {
+							operand  = dst,
+							operator = tacky_unary_operator_to_asm_unary_operator(i.operator),
+						},
+					)
+
+				case .Not:
+					insts(
+						function,
+						Asm_Inst_Cmp {
+							lhs = Asm_Immediate(0),
+							rhs = src,
+						},
+						mov(Asm_Immediate(0), dst),
+						Asm_Inst_Set_CC {
+							code    = .E,
+							operand = dst,
+						},
+					)
+				}
+			case Tacky_Inst_Binary:
+				dst := convert_value_to_operand(function, i.dst)
+				lhs := convert_value_to_operand(function, i.lhs)
+				rhs := convert_value_to_operand(function, i.rhs)
+
+				switch i.operator {
+				case .Multiply, .Add, .Subtract, .Bitwise_And,
+					 .Bitwise_Or, .Bitwise_Xor, .Left_Shift, .Right_Shift:
+					insts(
+						function,
+						mov(lhs, dst),
 						Asm_Inst_Binary {
 							operator = tacky_binary_operator_to_asm_unary_operator(i.operator),
 							dst      = dst,
-							src      = convert_value_to_operand(function, i.rhs),
+							src      = rhs,
 						},
 					)
 				case .Divide, .Remainder:
-					dst := convert_value_to_operand(function, i.dst)
 					insts(
 						function,
-						mov(convert_value_to_operand(function, i.lhs), .DX),
+						mov(lhs, .AX),
 						.Cdq,
 						Asm_Inst_Idiv {
-							operand = convert_value_to_operand(function, i.rhs),
+							operand = rhs,
 						},
 						mov(
 							.AX if i.operator == .Divide else .DX,
 							dst,
 						),
 					)
+				case .Equal,
+					 .Not_Equal,
+					 .Less_Than,
+					 .Less_Or_Equal,
+					 .Greater_Than,
+					 .Greater_Or_Equal:
+
+					condition_code_mapped := #partial [Tacky_Binary_Operator]Asm_Condition_Code {
+						.Equal            = .E,
+						.Not_Equal        = .NE,
+						.Less_Than        = .L,
+						.Less_Or_Equal    = .LE,
+						.Greater_Than     = .G,
+						.Greater_Or_Equal = .GE,
+					}
+
+
+					insts(
+						function,
+						Asm_Inst_Cmp {
+							lhs = rhs, // NOTE: intentionally switched
+							rhs = lhs,
+						},
+						mov(Asm_Immediate(0), dst),
+						Asm_Inst_Set_CC {
+							code    = condition_code_mapped[i.operator],
+							operand = dst,
+						},
+					)
 				}
+			case Tacky_Inst_Copy:
+				insts(
+					function,
+					mov(
+						convert_value_to_operand(function, i.src),
+						convert_value_to_operand(function, i.dst),
+					),
+				)
+			case Tacky_Inst_Jump:
+				insts(
+					function,
+					Asm_Inst_Jmp {
+						target = convert_label(i.target),
+					},
+				)
+			case Tacky_Inst_Jump_If_Zero:
+				insts(
+					function,
+					Asm_Inst_Cmp {
+						lhs = Asm_Immediate(0),
+						rhs = convert_value_to_operand(function, i.condition),
+					},
+					Asm_Inst_Jmp_CC {
+						code   = .E,
+						target = convert_label(i.target),
+					},
+				)
+			case Tacky_Inst_Jump_If_Not_Zero:
+				insts(
+					function,
+					Asm_Inst_Cmp {
+						lhs = Asm_Immediate(0),
+						rhs = convert_value_to_operand(function, i.condition),
+					},
+					Asm_Inst_Jmp_CC {
+						code   = .NE,
+						target = convert_label(i.target),
+					},
+				)
+
+			case Tacky_Inst_Label:
+				insts(
+					function,
+					convert_label(i),
+				)
 			}
 		}
 	}
 
 	replace_pseudo :: proc(u: ^Asm_Unit) -> int {
 		temp := TEMP_ALLOCATOR_GUARD()
-		pseudo_to_stack_table := make_slice([]Asm_Stack, u.function.largest_pseudo+1, allocator = temp)
+		pseudo_to_stack_table := make_slice([]Asm_Stack, u.function.pseudo_count, allocator = temp)
 
-		for i in 0..=u.function.largest_pseudo {
+		for i in 0..<u.function.pseudo_count {
 			// +1 because we have to start at -4
 			pseudo_to_stack_table[i] = Asm_Stack(-((i + 1) * 4))
 		}
@@ -117,7 +215,16 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 				replace_operand(&i.dst, pseudo_to_stack_table, &current_stack_depth)
 			case Asm_Inst_Idiv:
 				replace_operand(&i.operand, pseudo_to_stack_table, &current_stack_depth)
-			case Asm_Inst_Allocate_Stack, Asm_Inst_Plain:
+			case Asm_Inst_Cmp:
+				replace_operand(&i.lhs, pseudo_to_stack_table, &current_stack_depth)
+				replace_operand(&i.rhs, pseudo_to_stack_table, &current_stack_depth)
+			case Asm_Inst_Set_CC:
+				replace_operand(&i.operand, pseudo_to_stack_table, &current_stack_depth)
+			case Asm_Inst_Allocate_Stack,
+				 Asm_Inst_Plain,
+				 Asm_Inst_Label,
+				 Asm_Inst_Jmp,
+				 Asm_Inst_Jmp_CC: // NOTE: deliberately left empty
 			}
 		}
 
@@ -144,24 +251,39 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 				} else {
 					xar.append(&new_instructions, i)
 				}
-			case Asm_Inst_Binary:
-				if (i.operator in bit_set[Asm_Binary_Operator]{.Add, .Sub}) {
-					src, src_ok := i.src.(Asm_Stack)
-					dst, dst_ok := i.dst.(Asm_Stack)
-					if src_ok && dst_ok {
+			case Asm_Inst_Cmp:
+				lhs, lhs_ok := i.lhs.(Asm_Stack)
+
+				#partial switch rhs in i.rhs {
+				case Asm_Immediate:
+					xar.append(
+						&new_instructions,
+						mov(rhs, .R11),
+						Asm_Inst_Cmp {
+							lhs = i.lhs,
+							rhs = .R11,
+						},
+					)
+				case Asm_Stack:
+					if lhs_ok {
 						xar.append(
 							&new_instructions,
-							mov(src, .R10),
-							Asm_Inst_Binary {
-								operator = i.operator,
-								src      = Asm_Register.R10,
-								dst      = dst,
+							mov(lhs, .R10),
+							Asm_Inst_Cmp {
+								lhs = Asm_Register.R10,
+								rhs = rhs,
 							},
 						)
 					} else {
 						xar.append(&new_instructions, i)
 					}
-				} else {
+				case:
+					xar.append(&new_instructions, i)
+				}
+
+			case Asm_Inst_Binary:
+				#partial switch i.operator {
+				case .Mult:
 					dst, dst_ok := i.dst.(Asm_Stack)
 					if dst_ok {
 						xar.append(
@@ -173,6 +295,40 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 								dst = .R11,
 							},
 							mov(.R11, dst),
+						)
+					} else {
+						xar.append(&new_instructions, i)
+					}
+				case .Sal, .Sar:
+					src, src_ok := i.src.(Asm_Stack)
+					dst, dst_ok := i.dst.(Asm_Stack)
+					if src_ok && dst_ok {
+						xar.append(
+							&new_instructions,
+							mov(.CX, .R10),
+							mov(src, .CX),
+							Asm_Inst_Binary {
+								operator = i.operator,
+								src      = .CX,
+								dst      = dst,
+							},
+							mov(.R10, .CX),
+						)
+					} else {
+						xar.append(&new_instructions, i)
+					}
+				case:
+					src, src_ok := i.src.(Asm_Stack)
+					dst, dst_ok := i.dst.(Asm_Stack)
+					if src_ok && dst_ok {
+						xar.append(
+							&new_instructions,
+							mov(src, .R10),
+							Asm_Inst_Binary {
+								operator = i.operator,
+								src      = Asm_Register.R10,
+								dst      = dst,
+							},
 						)
 					} else {
 						xar.append(&new_instructions, i)
@@ -191,7 +347,13 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 				} else {
 					xar.append(&new_instructions, i)
 				}
-			case Asm_Inst_Plain, Asm_Inst_Allocate_Stack, Asm_Inst_Unary:
+			case Asm_Inst_Plain,
+				 Asm_Inst_Allocate_Stack,
+				 Asm_Inst_Unary,
+				 Asm_Inst_Jmp,
+				 Asm_Inst_Jmp_CC,
+				 Asm_Inst_Set_CC,
+				 Asm_Inst_Label:
 				xar.append(&new_instructions, i)
 			}
 		}
