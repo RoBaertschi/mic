@@ -1,0 +1,6 @@
+int main(void) {
+    int a = b;
+    return a;
+}
+---
+Error:CHECKER:2:13:invalid reference "b"

@@ -33,6 +33,7 @@ Token_Kind :: enum {
 	Greater_Than,        // >
 	Less_Than_Equal,     // <=
 	Greater_Than_Equal,  // >=
+	Equal,               // =
 
 	Identifier,
 	Constant,
@@ -241,6 +242,8 @@ l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 		if l_peek_ch(l) == '=' {
 			t.kind = .Double_Equal
 			l_next_ch(l)
+		} else {
+			t.kind = .Equal
 		}
 	
 	case:

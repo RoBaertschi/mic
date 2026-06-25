@@ -1,11 +1,13 @@
 #+vet explicit-allocators
 package mic
 
+import "core:container/xar"
 import "core:fmt"
 import "core:strconv"
 
 P_Precedence :: enum {
 	Lowest,
+	Assignment,
 	Or,
 	And,
 	Bitwise_Or,
@@ -20,6 +22,7 @@ P_Precedence :: enum {
 }
 
 p_precedences := #partial [Token_Kind]P_Precedence {
+	.Equal               = .Assignment,
 	.Double_Pipe         = .Or,
 	.Double_Ampersand    = .And,
 	.Pipe                = .Bitwise_Or,
@@ -44,6 +47,7 @@ P_Prefix_Proc :: #type proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool)
 
 p_prefix_procs := #partial [Token_Kind]P_Prefix_Proc {
 	.Constant    = p_parse_constant,
+	.Identifier  = p_parse_variable,
 	.Hyphen      = p_parse_unary,
 	.Tilde       = p_parse_unary,
 	.Exclamation = p_parse_unary,
@@ -53,6 +57,7 @@ p_prefix_procs := #partial [Token_Kind]P_Prefix_Proc {
 P_Infix_Proc :: #type proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool)
 
 p_infix_procs := #partial [Token_Kind]P_Infix_Proc {
+	.Equal               = p_parse_assignment,
 	.Plus                = p_parse_binary,
 	.Hyphen              = p_parse_binary,
 	.Asterisk            = p_parse_binary,
@@ -187,17 +192,97 @@ p_parse_def_function :: proc(p: ^Parser) -> (def: ^Ast_Def_Function) {
 		return
 	}
 
-	p_next_token(p)
-
-	stmt := p_parse_stmt(p)
-
-	if _, ok := p_expect_peek(p, .Close_Brace); !ok {
+	def.body, ok = p_parse_block(p)
+	if !ok {
 		p_skip_def_function(p)
 		return
 	}
 
-	def.body = stmt
 	return
+}
+
+p_parse_block :: proc(p: ^Parser) -> (Ast_Block, bool) {
+	assert(p.current_token.kind == .Open_Brace)
+	block: Ast_Block
+	xar.init(&block, ast_allocator(p.u))
+	
+	p_next_token(p)
+
+	loop: for p.current_token.kind != .EOF {
+		#partial switch p.current_token.kind {
+		case .Close_Brace:
+			break loop
+		case .Int:
+			xar.append(&block, p_parse_decl(p))
+		case:
+			xar.append(&block, p_parse_stmt(p))
+		}
+		p_next_token(p)
+	}
+
+	_, ok := p_expect(p, .Close_Brace)
+	return block, ok
+}
+
+p_parse_decl :: proc(p: ^Parser) -> ^Ast_Decl {
+	p_skip_decl :: proc(p: ^Parser) {
+		for p.current_token.kind != .EOF {
+			#partial switch p.peek_token.kind {
+			case .Semicolon:
+				p_next_token(p)
+				return
+			case .Close_Brace:
+				return
+			case:
+				p_next_token(p)
+			}
+		}
+	}
+
+	token, ok := p_expect(p, .Int)
+	if !ok {
+		p_skip_decl(p)
+		return ast_new_decl_error(p.u, token)
+	}
+
+	decl_variable := ast_new(p.u, token, Ast_Decl_Variable)
+
+	ident: Token
+	ident, ok = p_expect_peek(p, .Identifier)
+	if !ok {
+		p_skip_decl(p)
+		return ast_new_decl_error(p.u, token)
+	}
+
+	decl_variable.name = ast_new_ident(p.u, ident)
+
+	#partial switch p.peek_token.kind {
+	case .Semicolon:
+		p_expect_peek(p, .Semicolon)
+
+		return decl_variable
+
+	case .Equal:
+		p_next_token(p) // Skip '='
+		p_next_token(p) // Move onto the expression
+
+		decl_variable.init, ok = p_parse_expr(p, .Lowest)
+		if !ok {
+			p_skip_decl(p)
+			return decl_variable
+		}
+
+		_, ok = p_expect_peek(p, .Semicolon)
+		if !ok {
+			p_skip_decl(p)
+		}
+		return decl_variable
+	case:
+		p_error(p, p.peek_token, "expected Semicolon or Equal, got %v", p.peek_token.kind)
+		p_skip_decl(p)
+		return decl_variable
+	}
+
 }
 
 p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
@@ -215,24 +300,45 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 		}
 	}
 
-	return_token, ok := p_expect(p, .Return)
+	#partial switch p.current_token.kind {
+	case .Return:
+		stmt, ok := p_parse_return(p)
+		if !ok {
+			p_skip_stmt(p)
+		}
+		return stmt
+	case .Semicolon:
+		return ast_new(p.u, p.current_token, Ast_Stmt)
+	case:
+		stmt_expr := ast_new(p.u, p.current_token, Ast_Stmt_Expr)
+		stmt_expr.expr, _ = p_parse_expr(p, .Lowest)
+		if _, ok := p_expect_peek(p, .Semicolon); !ok {
+			p_skip_stmt(p)
+		}
+		return stmt_expr
+	}
+}
+
+p_parse_return :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	return_token: Token
+	return_token, ok = p_expect(p, .Return)
 	if !ok {
-		p_skip_stmt(p)
-		return ast_new_stmt_error(p.u, return_token)
+		stmt = ast_new_stmt_error(p.u, return_token)
+		return
 	}
 
 	stmt_return := ast_new(p.u, return_token, Ast_Stmt_Return)
+	stmt         = stmt_return
 	p_next_token(p)
 
 	stmt_return.result, ok = p_parse_expr(p, .Lowest)
 	if !ok {
-		p_skip_stmt(p)
-		return stmt_return
+		return
 	}
 
-	p_expect_peek(p, .Semicolon)
+	_, ok = p_expect_peek(p, .Semicolon)
 
-	return stmt_return
+	return
 }
 
 p_parse_expr :: proc(p: ^Parser, prec: P_Precedence) -> (expr: ^Ast_Expr, ok: bool) {
@@ -328,6 +434,18 @@ p_parse_binary :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool
 	return
 }
 
+p_parse_assignment :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool) {
+	ensure(p.current_token.kind == .Equal)
+
+	expr_assignment     := ast_new(p.u, p.current_token, Ast_Expr_Assignment)
+	expr                 = expr_assignment
+	expr_assignment.lhs  = lhs
+
+	p_next_token(p)
+	expr_assignment.rhs, ok = p_parse_expr(p, .Lowest)
+	return
+}
+
 p_parse_constant :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
 	token: Token
 	token, ok = p_expect(p, .Constant)
@@ -346,5 +464,20 @@ p_parse_constant :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
 	expr_constant       := ast_new(p.u, token, Ast_Expr_Constant)
 	expr_constant.value  = value
 	expr                 = expr_constant
+	return
+}
+
+p_parse_variable :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
+	token: Token
+	token, ok = p_expect(p, .Identifier)
+	if !ok {
+		expr = ast_new_expr_error(p.u, token)
+		return
+	}
+
+	expr_variable      := ast_new(p.u, token, Ast_Expr_Variable)
+	expr                = expr_variable
+	expr_variable.name  = ast_new_ident(p.u, token)
+
 	return
 }

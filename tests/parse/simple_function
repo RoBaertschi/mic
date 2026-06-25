@@ -4,7 +4,9 @@ int main(void) {
 ---
 Unit {
  function_definition: DefFunction {
-   name: main
-   body: Return 2
+  name: main
+  body: {
+   Return 2
   }
+ }
 }

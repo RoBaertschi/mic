@@ -1,7 +1,18 @@
+#+vet explicit-allocators
 package mic
+
+import "base:runtime"
 
 import "core:fmt"
 import "core:container/xar"
+
+Tacky_Gen_Context :: struct {
+	u:        ^Tacky_Unit,
+	entities: map[^Entity]Tacky_Value,
+	function: ^Tacky_Def_Function,
+	locals:   Tacky_Value_Variable,
+	labels:   Tacky_Label,
+}
 
 tacky_gen :: proc(u: ^Unit, out_u: ^Tacky_Unit) {
 	function      := tacky_new(out_u, Tacky_Def_Function)
@@ -9,49 +20,103 @@ tacky_gen :: proc(u: ^Unit, out_u: ^Tacky_Unit) {
 	out_u.function = function
 
 	xar.init(&function.instructions, tacky_allocator(out_u))
-	tacky_gen_body(out_u, function, u.function.body)
+
+	c := Tacky_Gen_Context {
+		function = function,
+		entities = make(map[^Entity]Tacky_Value, allocator = runtime.heap_allocator()),
+		u        = out_u,
+	}
+	defer delete(c.entities)
+
+	tacky_gen_body(&c, &u.function.body)
+	tacky_gen_instructions(&c, Tacky_Inst_Return(Tacky_Value_Constant(0)))
 }
 
-tacky_gen_instructions :: proc(function: ^Tacky_Def_Function, insts: ..Tacky_Inst) {
-	xar.append(&function.instructions, ..insts)
+tacky_gen_instructions :: proc(c: ^Tacky_Gen_Context, insts: ..Tacky_Inst) {
+	xar.append(&c.function.instructions, ..insts)
 }
 
-tacky_gen_make_temporary :: proc(function: ^Tacky_Def_Function) -> (var: Tacky_Value_Variable) {
-	var              = function.locals
-	function.locals += 1
+tacky_gen_make_temporary :: proc(c: ^Tacky_Gen_Context) -> (var: Tacky_Value_Variable) {
+	var       = c.locals
+	c.locals += 1
 	return
 }
 
-tacky_gen_make_label :: proc(function: ^Tacky_Def_Function) -> (label: Tacky_Label) {
-	label            = function.labels
-	function.labels += 1
+tacky_gen_make_label :: proc(c: ^Tacky_Gen_Context) -> (label: Tacky_Label) {
+	label     = c.labels
+	c.labels += 1
 	return
 }
 
-tacky_gen_body :: proc(u: ^Tacky_Unit, function: ^Tacky_Def_Function, body: ^Ast_Stmt) {
-	switch b in body.variant {
-	case nil:              panic("nil stmt")
-	case ^Ast_Stmt_Error:  panic("Error stmt")
-	case ^Ast_Stmt_Return:
-		value := tacky_gen_expr(u, function, b.result)
-		tacky_gen_instructions(
-			function,
-			Tacky_Inst_Return(value),
-		)
+tacky_gen_body :: proc(c: ^Tacky_Gen_Context, body: ^Ast_Block) {
+	for it := xar.iterator(body); block_item in xar.iterate_by_val(&it) {
+		switch bi in block_item {
+		case ^Ast_Stmt:
+			tacky_gen_stmt(c, bi)
+		case ^Ast_Decl:
+			tacky_gen_decl(c, bi)
+		}
 	}
 }
 
-tacky_gen_expr :: proc(u: ^Tacky_Unit, function: ^Tacky_Def_Function, expr: ^Ast_Expr) -> Tacky_Value {
+tacky_gen_decl :: proc(c: ^Tacky_Gen_Context, decl: ^Ast_Decl) {
+	switch d in decl.variant {
+	case ^Ast_Decl_Error: panic("error decl")
+	case ^Ast_Decl_Variable:
+		ensure(d.entity != nil)
+		var                  := tacky_gen_make_temporary(c)
+		c.entities[d.entity]  = var
+		if d.init != nil {
+			init := tacky_gen_expr(c, d.init)
+			tacky_gen_instructions(
+				c,
+				Tacky_Inst_Copy {
+					src = init,
+					dst = var,
+				},
+			)
+		}
+	}
+}
+
+tacky_gen_stmt :: proc(c: ^Tacky_Gen_Context, stmt: ^Ast_Stmt) {
+	switch s in stmt.variant {
+	case nil: // valid, but do nothing
+	case ^Ast_Stmt_Error:  panic("Error stmt")
+	case ^Ast_Stmt_Return:
+		value := tacky_gen_expr(c, s.result)
+		tacky_gen_instructions(
+			c,
+			Tacky_Inst_Return(value),
+		)
+	case ^Ast_Stmt_Expr:
+		tacky_gen_expr(c, s.expr)
+	}
+}
+
+tacky_gen_get_lvalue :: proc(c: ^Tacky_Gen_Context, expr: ^Ast_Expr) -> Tacky_Value {
+	#partial switch e in expr.variant {
+	case ^Ast_Expr_Variable:
+		ensure(e.entity != nil)
+		value, ok := c.entities[e.entity]
+		ensure(ok)
+		return value
+	case:
+		fmt.panicf("invalid l-value expression %v", e)
+	}
+}
+
+tacky_gen_expr :: proc(c: ^Tacky_Gen_Context, expr: ^Ast_Expr) -> Tacky_Value {
 	switch e in expr.variant {
 	case nil:             panic("nil expr")
 	case ^Ast_Expr_Error: panic("error expr")
 	case ^Ast_Expr_Constant:
 		return Tacky_Value_Constant(e.value)
 	case ^Ast_Expr_Unary:
-		src := tacky_gen_expr(u, function, e.inner)
-		dst := tacky_gen_make_temporary(function)
+		src := tacky_gen_expr(c, e.inner)
+		dst := tacky_gen_make_temporary(c)
 		tacky_gen_instructions(
-			function,
+			c,
 			Tacky_Inst_Unary {
 				operator = Tacky_Unary_Operator(e.operator),
 				dst      = dst,
@@ -62,22 +127,22 @@ tacky_gen_expr :: proc(u: ^Tacky_Unit, function: ^Tacky_Def_Function, expr: ^Ast
 	case ^Ast_Expr_Binary:
 		#partial switch e.operator {
 		case .And:
-			false_label := tacky_gen_make_label(function)
-			end_label   := tacky_gen_make_label(function)
-			dst         := tacky_gen_make_temporary(function)
-			lhs         := tacky_gen_expr(u, function, e.lhs)
+			false_label := tacky_gen_make_label(c)
+			end_label   := tacky_gen_make_label(c)
+			dst         := tacky_gen_make_temporary(c)
+			lhs         := tacky_gen_expr(c, e.lhs)
 
 			tacky_gen_instructions(
-				function,
+				c,
 				Tacky_Inst_Jump_If_Zero {
 					condition = lhs,
 					target    = false_label,
 				}
 			)
-			rhs := tacky_gen_expr(u, function, e.rhs)
+			rhs := tacky_gen_expr(c, e.rhs)
 
 			tacky_gen_instructions(
-				function,
+				c,
 				Tacky_Inst_Jump_If_Zero {
 					target    = false_label,
 					condition = rhs,
@@ -100,22 +165,22 @@ tacky_gen_expr :: proc(u: ^Tacky_Unit, function: ^Tacky_Def_Function, expr: ^Ast
 			return dst
 
 		case .Or:
-			true_label := tacky_gen_make_label(function)
-			end_label   := tacky_gen_make_label(function)
-			dst         := tacky_gen_make_temporary(function)
-			lhs         := tacky_gen_expr(u, function, e.lhs)
+			true_label := tacky_gen_make_label(c)
+			end_label   := tacky_gen_make_label(c)
+			dst         := tacky_gen_make_temporary(c)
+			lhs         := tacky_gen_expr(c, e.lhs)
 
 			tacky_gen_instructions(
-				function,
+				c,
 				Tacky_Inst_Jump_If_Not_Zero {
 					condition = lhs,
 					target    = true_label,
 				}
 			)
-			rhs := tacky_gen_expr(u, function, e.rhs)
+			rhs := tacky_gen_expr(c, e.rhs)
 
 			tacky_gen_instructions(
-				function,
+				c,
 				Tacky_Inst_Jump_If_Not_Zero {
 					target    = true_label,
 					condition = rhs,
@@ -138,12 +203,32 @@ tacky_gen_expr :: proc(u: ^Tacky_Unit, function: ^Tacky_Def_Function, expr: ^Ast
 			return dst
 
 		case:
-			lhs, rhs := tacky_gen_expr(u, function, e.lhs), tacky_gen_expr(u, function, e.rhs)
-			dst      := tacky_gen_make_temporary(function)
+			@(static)
+			ast_to_tacky := #partial [Ast_Binary_Operator]Tacky_Binary_Operator {
+				.Add              = .Add,
+				.Subtract         = .Subtract,
+				.Multiply         = .Multiply,
+				.Divide           = .Divide,
+				.Remainder        = .Remainder,
+				.Bitwise_And      = .Bitwise_And,
+				.Bitwise_Or       = .Bitwise_Or,
+				.Bitwise_Xor      = .Bitwise_Xor,
+				.Left_Shift       = .Left_Shift,
+				.Right_Shift      = .Right_Shift,
+				.Equal            = .Equal,
+				.Not_Equal        = .Not_Equal,
+				.Less_Than        = .Less_Than,
+				.Less_Or_Equal    = .Less_Or_Equal,
+				.Greater_Than     = .Greater_Than,
+				.Greater_Or_Equal = .Greater_Or_Equal,
+			}
+
+			lhs, rhs := tacky_gen_expr(c, e.lhs), tacky_gen_expr(c, e.rhs)
+			dst      := tacky_gen_make_temporary(c)
 			tacky_gen_instructions(
-				function,
+				c,
 				Tacky_Inst_Binary {
-					operator = Tacky_Binary_Operator(e.operator),
+					operator = ast_to_tacky[e.operator],
 					lhs      = lhs,
 					rhs      = rhs,
 					dst      = dst,
@@ -151,11 +236,21 @@ tacky_gen_expr :: proc(u: ^Tacky_Unit, function: ^Tacky_Def_Function, expr: ^Ast
 			)
 			return dst
 		}
-		if (e.operator in bit_set[Ast_Binary_Operator]{.And, .Or}) {
-			// TODO(robin): this feels overengineered, assess later
-
-		} else {
-		}
+	case ^Ast_Expr_Variable:
+		var := c.entities[e.entity]
+		ensure(var != nil)
+		return var
+	case ^Ast_Expr_Assignment:
+		var    := tacky_gen_get_lvalue(c, e.lhs)
+		result := tacky_gen_expr(c, e.rhs)
+		tacky_gen_instructions(
+			c,
+			Tacky_Inst_Copy {
+				src = result,
+				dst = var,
+			},
+		)
+		return var
 	}
 	fmt.panicf("invalid expr %v", expr.variant)
 }

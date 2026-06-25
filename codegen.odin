@@ -111,6 +111,7 @@ codegen :: proc(u: ^Tacky_Unit, out_u: ^Asm_Unit) {
 					 .Greater_Than,
 					 .Greater_Or_Equal:
 
+					@(static)
 					condition_code_mapped := #partial [Tacky_Binary_Operator]Asm_Condition_Code {
 						.Equal            = .E,
 						.Not_Equal        = .NE,

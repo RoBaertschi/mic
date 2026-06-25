@@ -35,8 +35,6 @@ Tacky_Instructions :: xar.Array(Tacky_Inst, 8)
 
 Tacky_Def_Function :: struct {
 	name:         string,
-	locals:       Tacky_Value_Variable,
-	labels:       Tacky_Label,
 	instructions: Tacky_Instructions,
 }
 

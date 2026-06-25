@@ -15,6 +15,7 @@ import "core:mem/virtual"
 Flags :: struct {
 	lex:     bool `usage:"only lex the provided c source file"`,
 	parse:   bool `usage:"lex and parse the provided c source file"`,
+	validate: bool `usage:"lex, parse, and validate the provided c source file"`,
 	tacky:   bool `usage:"only generate the tacky for the provided c source file"`,
 	codegen: bool `usage:"compile the provided c source file and print the asm ir"`,
 	s:       bool `usage:"compile the provided c source file and print the asm"`,
@@ -169,11 +170,46 @@ parse_ast :: proc(s: string, u: ^Unit, w: io.Writer) -> int {
 }
 
 
+validate_full :: proc(s: string, w: io.Writer) -> int {
+	w := w
+
+	u: Unit
+	total_errors := parse_ast(s, &u, w)
+	if 0 < total_errors {
+		return total_errors
+	}
+
+	return check_full(&u, w)
+}
+
+check_full :: proc(u: ^Unit, w: io.Writer) -> int {
+	w := w
+
+	info := Checker_Info {
+		error_proc = proc(w_raw: rawptr, t: Token, format: string, args: ..any) {
+			w := (^io.Writer)(w_raw)^
+
+			temp := TEMP_ALLOCATOR_GUARD()
+			message := fmt.aprintf(format, ..args, allocator = temp)
+			fmt.wprintf(w, "Error:CHECKER:%d:%d:%v\n", t.line, t.col, message)
+		},
+		error_data = &w,
+	}
+	check_unit(u, &info)
+
+	return info.errors
+}
+
 tacky_gen_full :: proc(s: string, w: io.Writer) -> int {
 	w := w
 
 	u: Unit
 	total_errors := parse_ast(s, &u, w)
+	if 0 < total_errors {
+		return total_errors
+	}
+
+	total_errors = check_full(&u, w)
 	if 0 < total_errors {
 		return total_errors
 	}
@@ -190,6 +226,11 @@ codegen_full :: proc(s: string, w: io.Writer) -> int {
 
 	u: Unit
 	total_errors := parse_ast(s, &u, w)
+	if 0 < total_errors {
+		return total_errors
+	}
+
+	total_errors = check_full(&u, w)
 	if 0 < total_errors {
 		return total_errors
 	}
@@ -234,6 +275,11 @@ emit_full :: proc(s: string, w: io.Writer) -> int {
 		return total_errors
 	}
 
+	total_errors = check_full(&u, w)
+	if total_errors > 0 {
+		return total_errors
+	}
+
 	tacky_u: Tacky_Unit
 	tacky_gen(&u, &tacky_u)
 
@@ -257,6 +303,7 @@ main :: proc() {
 		Emit,
 		Lex,
 		Parse,
+		Validate,
 		Tacky_Gen,
 		Codegen,
 		Asm_Source,
@@ -274,6 +321,14 @@ main :: proc() {
 			os.exit(1)
 		}
 		stage = .Parse
+	}
+
+	if f.validate {
+		if stage != .Emit {
+			log.fatalf("multiple stage specifiers found, while only one at the time is supported")
+			os.exit(1)
+		}
+		stage = .Validate
 	}
 
 	if f.tacky {
@@ -311,6 +366,10 @@ main :: proc() {
 		if 0 < parse_full(output, os.to_stream(os.stdout)) {
 			os.exit(1)
 		}
+	case .Validate:
+		if 0 < validate_full(output, os.to_stream(os.stdout)) {
+			os.exit(1)
+		}
 	case .Tacky_Gen:
 		if 0 < tacky_gen_full(output, os.to_stream(os.stdout)) {
 			os.exit(1)
@@ -324,6 +383,10 @@ main :: proc() {
 			os.exit(1)
 		}
 	case .Emit:
+		if 0 < validate_full(output, os.to_stream(os.stdout)) {
+			os.exit(1)
+		}
+
 		info, err := os.fstat(f.file, temp)
 		if err != nil {
 			log.fatalf("could not stat input file: %v", err)

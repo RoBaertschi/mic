@@ -1,3 +1,5 @@
 int main(void) {
-    return !1;
+    int a = 3;
+
+    return a = 2;
 }
