@@ -113,14 +113,72 @@ tacky_gen_expr :: proc(c: ^Tacky_Gen_Context, expr: ^Ast_Expr) -> Tacky_Value {
 	case ^Ast_Expr_Constant:
 		return Tacky_Value_Constant(e.value)
 	case ^Ast_Expr_Unary:
-		src := tacky_gen_expr(c, e.inner)
+		switch e.operator {
+		case .Complement, .Negate, .Not:
+			@(static)
+			ast_to_tacky := #partial [Ast_Unary_Operator]Tacky_Unary_Operator {
+				.Complement = .Complement,
+				.Negate     = .Negate,
+				.Not        = .Not,
+			}
+
+			src := tacky_gen_expr(c, e.inner)
+			dst := tacky_gen_make_temporary(c)
+			tacky_gen_instructions(
+				c,
+				Tacky_Inst_Unary {
+					operator = ast_to_tacky[e.operator],
+					dst      = dst,
+					src      = src,
+				},
+			)
+			return dst
+		case .Increment, .Decrement:
+			@(static)
+			ast_to_tacky := #partial [Ast_Unary_Operator]Tacky_Binary_Operator {
+				.Increment = .Add,
+				.Decrement = .Subtract,
+			}
+
+			dst := tacky_gen_make_temporary(c)
+			var := tacky_gen_get_lvalue(c, e.inner)
+			tacky_gen_instructions(
+				c,
+				Tacky_Inst_Binary {
+					operator = ast_to_tacky[e.operator],
+					lhs      = var,
+					rhs      = Tacky_Value_Constant(1),
+					dst      = var,
+				},
+				Tacky_Inst_Copy {
+					src = var,
+					dst = dst,
+				},
+			)
+			return dst
+		}
+
+	case ^Ast_Expr_Postfix:
 		dst := tacky_gen_make_temporary(c)
+		var := tacky_gen_get_lvalue(c, e.inner)
+
+		@(static)
+		ast_to_tacky := [Ast_Postfix_Operator]Tacky_Binary_Operator {
+			.Increment = .Add,
+			.Decrement = .Subtract,
+		}
+
 		tacky_gen_instructions(
 			c,
-			Tacky_Inst_Unary {
-				operator = Tacky_Unary_Operator(e.operator),
-				dst      = dst,
-				src      = src,
+			Tacky_Inst_Copy {
+				src = var,
+				dst = dst,
+			},
+			Tacky_Inst_Binary {
+				operator = ast_to_tacky[e.operator],
+				lhs      = var,
+				rhs      = Tacky_Value_Constant(1),
+				dst      = var,
 			},
 		)
 		return dst
@@ -243,13 +301,42 @@ tacky_gen_expr :: proc(c: ^Tacky_Gen_Context, expr: ^Ast_Expr) -> Tacky_Value {
 	case ^Ast_Expr_Assignment:
 		var    := tacky_gen_get_lvalue(c, e.lhs)
 		result := tacky_gen_expr(c, e.rhs)
-		tacky_gen_instructions(
-			c,
-			Tacky_Inst_Copy {
-				src = result,
-				dst = var,
-			},
-		)
+
+		if e.operator != .None {
+			@(static)
+			ast_to_tacky := [Ast_Assignment_Operator]Tacky_Binary_Operator {
+				.None        = .Subtract,
+				.Add         = .Add,
+				.Subtract    = .Subtract,
+				.Multiply    = .Multiply,
+				.Divide      = .Divide,
+				.Remainder   = .Remainder,
+				.Bitwise_And = .Bitwise_And,
+				.Bitwise_Or  = .Bitwise_Or,
+				.Bitwise_Xor = .Bitwise_Xor,
+				.Left_Shift  = .Left_Shift,
+				.Right_Shift = .Right_Shift,
+			}
+
+			tacky_gen_instructions(
+				c,
+				Tacky_Inst_Binary {
+					operator = ast_to_tacky[e.operator],
+					lhs      = var,
+					rhs      = result,
+					dst      = var,
+				},
+			)
+		} else {
+			tacky_gen_instructions(
+				c,
+				Tacky_Inst_Copy {
+					src = result,
+					dst = var,
+				},
+			)
+		}
+
 		return var
 	}
 	fmt.panicf("invalid expr %v", expr.variant)

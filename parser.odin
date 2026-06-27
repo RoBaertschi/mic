@@ -22,60 +22,89 @@ P_Precedence :: enum {
 }
 
 p_precedences := #partial [Token_Kind]P_Precedence {
-	.Equal               = .Assignment,
-	.Double_Pipe         = .Or,
-	.Double_Ampersand    = .And,
-	.Pipe                = .Bitwise_Or,
-	.Caret               = .Bitwise_Xor,
-	.Ampersand           = .Bitwise_And,
-	.Double_Equal        = .Equal,
-	.Exclamation_Equal   = .Equal,
-	.Less_Than           = .Ordered,
-	.Less_Than_Equal     = .Ordered,
-	.Greater_Than        = .Ordered,
-	.Greater_Than_Equal  = .Ordered,
-	.Double_Less_Than    = .Shift,
-	.Double_Greater_Than = .Shift,
-	.Plus                = .Sum,
-	.Hyphen              = .Sum,
-	.Asterisk            = .Product,
-	.Forward_Slash       = .Product,
-	.Precent             = .Product,
+	.Equal                     = .Assignment,
+	.Hyphen_Equal              = .Assignment,
+	.Plus_Equal                = .Assignment,
+	.Asterisk_Equal            = .Assignment,
+	.Forward_Slash_Equal       = .Assignment,
+	.Percent_Equal             = .Assignment,
+	.Ampersand_Equal           = .Assignment,
+	.Pipe_Equal                = .Assignment,
+	.Caret_Equal               = .Assignment,
+	.Double_Less_Than_Equal    = .Assignment,
+	.Double_Greater_Than_Equal = .Assignment,
+	.Double_Pipe               = .Or,
+	.Double_Ampersand          = .And,
+	.Pipe                      = .Bitwise_Or,
+	.Caret                     = .Bitwise_Xor,
+	.Ampersand                 = .Bitwise_And,
+	.Double_Equal              = .Equal,
+	.Exclamation_Equal         = .Equal,
+	.Less_Than                 = .Ordered,
+	.Less_Than_Equal           = .Ordered,
+	.Greater_Than              = .Ordered,
+	.Greater_Than_Equal        = .Ordered,
+	.Double_Less_Than          = .Shift,
+	.Double_Greater_Than       = .Shift,
+	.Plus                      = .Sum,
+	.Hyphen                    = .Sum,
+	.Asterisk                  = .Product,
+	.Forward_Slash             = .Product,
+	.Percent                   = .Product,
 }
 
 P_Prefix_Proc :: #type proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool)
 
 p_prefix_procs := #partial [Token_Kind]P_Prefix_Proc {
-	.Constant    = p_parse_constant,
-	.Identifier  = p_parse_variable,
-	.Hyphen      = p_parse_unary,
-	.Tilde       = p_parse_unary,
-	.Exclamation = p_parse_unary,
-	.Open_Paren  = p_parse_grouped_expression,
+	.Constant      = p_parse_constant,
+	.Identifier    = p_parse_variable,
+	.Hyphen        = p_parse_unary,
+	.Tilde         = p_parse_unary,
+	.Exclamation   = p_parse_unary,
+	.Double_Hyphen = p_parse_unary,
+	.Double_Plus   = p_parse_unary,
+	.Open_Paren    = p_parse_grouped_expression,
 }
 
 P_Infix_Proc :: #type proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool)
 
 p_infix_procs := #partial [Token_Kind]P_Infix_Proc {
-	.Equal               = p_parse_assignment,
-	.Plus                = p_parse_binary,
-	.Hyphen              = p_parse_binary,
-	.Asterisk            = p_parse_binary,
-	.Forward_Slash       = p_parse_binary,
-	.Precent             = p_parse_binary,
-	.Ampersand           = p_parse_binary,
-	.Pipe                = p_parse_binary,
-	.Caret               = p_parse_binary,
-	.Double_Less_Than    = p_parse_binary,
-	.Double_Greater_Than = p_parse_binary,
-	.Double_Ampersand    = p_parse_binary,
-	.Double_Pipe         = p_parse_binary,
-	.Double_Equal        = p_parse_binary,
-	.Exclamation_Equal   = p_parse_binary,
-	.Less_Than           = p_parse_binary,
-	.Less_Than_Equal     = p_parse_binary,
-	.Greater_Than        = p_parse_binary,
-	.Greater_Than_Equal  = p_parse_binary,
+	.Equal                     = p_parse_assignment,
+	.Hyphen_Equal              = p_parse_assignment,
+	.Plus_Equal                = p_parse_assignment,
+	.Asterisk_Equal            = p_parse_assignment,
+	.Forward_Slash_Equal       = p_parse_assignment,
+	.Percent_Equal             = p_parse_assignment,
+	.Ampersand_Equal           = p_parse_assignment,
+	.Pipe_Equal                = p_parse_assignment,
+	.Caret_Equal               = p_parse_assignment,
+	.Double_Less_Than_Equal    = p_parse_assignment,
+	.Double_Greater_Than_Equal = p_parse_assignment,
+	.Plus                      = p_parse_binary,
+	.Hyphen                    = p_parse_binary,
+	.Asterisk                  = p_parse_binary,
+	.Forward_Slash             = p_parse_binary,
+	.Percent                   = p_parse_binary,
+	.Ampersand                 = p_parse_binary,
+	.Pipe                      = p_parse_binary,
+	.Caret                     = p_parse_binary,
+	.Double_Less_Than          = p_parse_binary,
+	.Double_Greater_Than       = p_parse_binary,
+	.Double_Ampersand          = p_parse_binary,
+	.Double_Pipe               = p_parse_binary,
+	.Double_Equal              = p_parse_binary,
+	.Exclamation_Equal         = p_parse_binary,
+	.Less_Than                 = p_parse_binary,
+	.Less_Than_Equal           = p_parse_binary,
+	.Greater_Than              = p_parse_binary,
+	.Greater_Than_Equal        = p_parse_binary,
+}
+
+P_Postfix_Proc :: #type proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool)
+
+p_postfix_procs := #partial [Token_Kind]P_Postfix_Proc {
+	.Double_Hyphen = p_parse_postfix,
+	.Double_Plus   = p_parse_postfix,
 }
 
 P_Error_Proc :: #type proc(data: rawptr, t: Token, format: string, args: ..any)
@@ -351,15 +380,25 @@ p_parse_expr :: proc(p: ^Parser, prec: P_Precedence) -> (expr: ^Ast_Expr, ok: bo
 
 	expr, ok = prefix_proc(p)
 	if !ok {
-		// NOTE: expr should be retained
+		return
+	}
+
+	handle_postfix :: proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool) {
+		ok   = true
+		expr = left_expr
+
+		for postfix := p_postfix_procs[p.peek_token.kind]; postfix != nil; postfix = p_postfix_procs[p.peek_token.kind] {
+			p_next_token(p)
+			expr = postfix(p, expr) or_return
+		}
+
 		return
 	}
 
 	for p.peek_token.kind != .Semicolon && prec < p_peek_prec(p) {
 		infix_proc := p_infix_procs[p.peek_token.kind]
 		if infix_proc == nil {
-			// TODO: postfix
-			return
+			return handle_postfix(p, expr)
 		}
 
 		p_next_token(p)
@@ -369,8 +408,7 @@ p_parse_expr :: proc(p: ^Parser, prec: P_Precedence) -> (expr: ^Ast_Expr, ok: bo
 		}
 	}
 
-	// TODO: postfix
-	return
+	return handle_postfix(p, expr)
 }
 
 p_parse_grouped_expression :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
@@ -386,60 +424,90 @@ p_parse_grouped_expression :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
 }
 
 p_parse_unary :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
-	unary_expr := ast_new(p.u, p.current_token, Ast_Expr_Unary)
-	expr = unary_expr
+	expr_unary := ast_new(p.u, p.current_token, Ast_Expr_Unary)
+	expr = expr_unary
 
 	#partial switch p.current_token.kind {
-	case .Hyphen:      unary_expr.operator = .Negate
-	case .Tilde:       unary_expr.operator = .Complement
-	case .Exclamation: unary_expr.operator = .Not
-	case:              fmt.panicf("invalid token kind for p_parse_unary: %v", p.current_token.kind)
+	case .Hyphen:        expr_unary.operator = .Negate
+	case .Tilde:         expr_unary.operator = .Complement
+	case .Exclamation:   expr_unary.operator = .Not
+	case .Double_Hyphen: expr_unary.operator = .Decrement
+	case .Double_Plus:   expr_unary.operator = .Increment
+	case:                fmt.panicf("invalid token kind for p_parse_unary: %v", p.current_token.kind)
 	}
 
 	p_next_token(p)
-	unary_expr.inner, ok = p_parse_expr(p, .Prefix)
+	expr_unary.inner, ok = p_parse_expr(p, .Prefix)
+	return
+}
+
+p_parse_postfix :: proc(p: ^Parser, left_expr: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool) {
+	expr_postfix       := ast_new(p.u, p.current_token, Ast_Expr_Postfix)
+	expr_postfix.inner  = left_expr
+	expr                = expr_postfix
+
+	#partial switch p.current_token.kind {
+	case .Double_Hyphen: expr_postfix.operator = .Decrement
+	case .Double_Plus:   expr_postfix.operator = .Increment
+	case:                fmt.panicf("invalid token kind for p_parse_postfix: %v", p.current_token.kind)
+	}
+
+	ok = true
 	return
 }
 
 p_parse_binary :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool) {
-	binary_expr     := ast_new(p.u, p.current_token, Ast_Expr_Binary)
-	expr             = binary_expr
-	binary_expr.lhs  = lhs
+	expr_binary     := ast_new(p.u, p.current_token, Ast_Expr_Binary)
+	expr             = expr_binary
+	expr_binary.lhs  = lhs
 
 	#partial switch p.current_token.kind {
-	case .Asterisk:            binary_expr.operator = .Multiply
-	case .Forward_Slash:       binary_expr.operator = .Divide
-	case .Precent:             binary_expr.operator = .Remainder
-	case .Plus:                binary_expr.operator = .Add
-	case .Hyphen:              binary_expr.operator = .Subtract
-	case .Ampersand:           binary_expr.operator = .Bitwise_And
-	case .Pipe:                binary_expr.operator = .Bitwise_Or
-	case .Caret:               binary_expr.operator = .Bitwise_Xor
-	case .Double_Less_Than:    binary_expr.operator = .Left_Shift
-	case .Double_Greater_Than: binary_expr.operator = .Right_Shift
-	case .Double_Ampersand:    binary_expr.operator = .And
-	case .Double_Pipe:         binary_expr.operator = .Or
-	case .Double_Equal:        binary_expr.operator = .Equal
-	case .Exclamation_Equal:   binary_expr.operator = .Not_Equal
-	case .Less_Than:           binary_expr.operator = .Less_Than
-	case .Less_Than_Equal:     binary_expr.operator = .Less_Or_Equal
-	case .Greater_Than:        binary_expr.operator = .Greater_Than
-	case .Greater_Than_Equal:  binary_expr.operator = .Greater_Or_Equal
+	case .Asterisk:            expr_binary.operator = .Multiply
+	case .Forward_Slash:       expr_binary.operator = .Divide
+	case .Percent:             expr_binary.operator = .Remainder
+	case .Plus:                expr_binary.operator = .Add
+	case .Hyphen:              expr_binary.operator = .Subtract
+	case .Ampersand:           expr_binary.operator = .Bitwise_And
+	case .Pipe:                expr_binary.operator = .Bitwise_Or
+	case .Caret:               expr_binary.operator = .Bitwise_Xor
+	case .Double_Less_Than:    expr_binary.operator = .Left_Shift
+	case .Double_Greater_Than: expr_binary.operator = .Right_Shift
+	case .Double_Ampersand:    expr_binary.operator = .And
+	case .Double_Pipe:         expr_binary.operator = .Or
+	case .Double_Equal:        expr_binary.operator = .Equal
+	case .Exclamation_Equal:   expr_binary.operator = .Not_Equal
+	case .Less_Than:           expr_binary.operator = .Less_Than
+	case .Less_Than_Equal:     expr_binary.operator = .Less_Or_Equal
+	case .Greater_Than:        expr_binary.operator = .Greater_Than
+	case .Greater_Than_Equal:  expr_binary.operator = .Greater_Or_Equal
 	case:                      fmt.panicf("invalid token kind for p_parse_binary: %v", p.current_token.kind)
 	}
 
 	prec := p_current_prec(p)
 	p_next_token(p)
-	binary_expr.rhs, ok = p_parse_expr(p, prec)
+	expr_binary.rhs, ok = p_parse_expr(p, prec)
 	return
 }
 
 p_parse_assignment :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool) {
-	ensure(p.current_token.kind == .Equal)
-
 	expr_assignment     := ast_new(p.u, p.current_token, Ast_Expr_Assignment)
 	expr                 = expr_assignment
 	expr_assignment.lhs  = lhs
+
+	#partial switch p.current_token.kind {
+	case .Equal:                     expr_assignment.operator = .None
+	case .Hyphen_Equal:              expr_assignment.operator = .Subtract
+	case .Plus_Equal:                expr_assignment.operator = .Add
+	case .Asterisk_Equal:            expr_assignment.operator = .Multiply
+	case .Forward_Slash_Equal:       expr_assignment.operator = .Divide
+	case .Percent_Equal:             expr_assignment.operator = .Remainder
+	case .Ampersand_Equal:           expr_assignment.operator = .Bitwise_And
+	case .Pipe_Equal:                expr_assignment.operator = .Bitwise_Or
+	case .Caret_Equal:               expr_assignment.operator = .Bitwise_Xor
+	case .Double_Less_Than_Equal:    expr_assignment.operator = .Left_Shift
+	case .Double_Greater_Than_Equal: expr_assignment.operator = .Right_Shift
+	case:                            fmt.panicf("invalid token kind for p_parse_assignment: %v", p.current_token.kind)
+	}
 
 	p_next_token(p)
 	expr_assignment.rhs, ok = p_parse_expr(p, .Lowest)

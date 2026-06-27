@@ -112,6 +112,7 @@ Ast_Expr :: struct {
 		^Ast_Expr_Constant,
 		^Ast_Expr_Variable,
 		^Ast_Expr_Unary,
+		^Ast_Expr_Postfix,
 		^Ast_Expr_Binary,
 		^Ast_Expr_Assignment,
 	},
@@ -141,12 +142,26 @@ Ast_Unary_Operator :: enum {
 	Complement,
 	Negate,
 	Not,
+	Increment,
+	Decrement,
 }
 
 Ast_Expr_Unary :: struct {
 	using expr: Ast_Expr,
 
 	operator: Ast_Unary_Operator,
+	inner:    ^Ast_Expr,
+}
+
+Ast_Postfix_Operator :: enum {
+	Increment,
+	Decrement,
+}
+
+Ast_Expr_Postfix :: struct {
+	using expr: Ast_Expr,
+
+	operator: Ast_Postfix_Operator,
 	inner:    ^Ast_Expr,
 }
 
@@ -178,9 +193,25 @@ Ast_Expr_Binary :: struct {
 	lhs, rhs: ^Ast_Expr,
 }
 
+Ast_Assignment_Operator :: enum {
+	None,
+	Add,
+	Subtract,
+	Multiply,
+	Divide,
+	Remainder,
+	Bitwise_And,
+	Bitwise_Or,
+	Bitwise_Xor,
+	Left_Shift,
+	Right_Shift,
+}
+
 Ast_Expr_Assignment :: struct {
 	using expr: Ast_Expr,
-	lhs, rhs:   ^Ast_Expr,
+
+	operator: Ast_Assignment_Operator,
+	lhs, rhs: ^Ast_Expr,
 }
 
 @(private="file")
@@ -285,6 +316,11 @@ ast_expr_write_human_readable :: proc(expr: ^Ast_Expr, w: io.Writer, depth: int)
 		io.write_rune(w, '(')
 		ast_expr_write_human_readable(e.inner, w, depth)
 		io.write_rune(w, ')')
+	case ^Ast_Expr_Postfix:
+		io.write_rune(w, '(')
+		ast_expr_write_human_readable(e.inner, w, depth)
+		io.write_rune(w, ')')
+		io.write_string(w, e.t.content)
 	case ^Ast_Expr_Binary:
 		io.write_rune(w, '(')
 		ast_expr_write_human_readable(e.lhs, w, depth)

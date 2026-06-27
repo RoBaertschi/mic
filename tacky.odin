@@ -51,7 +51,11 @@ Tacky_Inst :: union {
 
 Tacky_Inst_Return :: distinct Tacky_Value
 
-Tacky_Unary_Operator :: distinct Ast_Unary_Operator
+Tacky_Unary_Operator :: enum {
+	Complement,
+	Negate,
+	Not,
+}
 
 Tacky_Inst_Unary :: struct {
 	operator: Tacky_Unary_Operator,

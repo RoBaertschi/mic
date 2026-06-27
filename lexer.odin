@@ -7,33 +7,44 @@ Token_Kind :: enum {
 	Invalid,
 	EOF,
 
-	Open_Paren,          // (
-	Close_Paren,         // )
-	Open_Brace,          // {
-	Close_Brace,         // }
-	Semicolon,           // ;
-	Tilde,               // ~
-	Hyphen,              // -
-	Two_Hyphen,          // --
-	Plus,                // +
-	Asterisk,            // *
-	Forward_Slash,       // /
-	Precent,             // %
-	Ampersand,           // &
-	Pipe,                // |
-	Caret,               // ^
-	Double_Less_Than,    // <<
-	Double_Greater_Than, // >>
-	Exclamation,         // !
-	Double_Ampersand,    // &&
-	Double_Pipe,         // ||
-	Double_Equal,        // ==
-	Exclamation_Equal,   // !=
-	Less_Than,           // <
-	Greater_Than,        // >
-	Less_Than_Equal,     // <=
-	Greater_Than_Equal,  // >=
-	Equal,               // =
+	Open_Paren,                // (
+	Close_Paren,               // )
+	Open_Brace,                // {
+	Close_Brace,               // }
+	Semicolon,                 // ;
+	Tilde,                     // ~
+	Hyphen,                    // -
+	Hyphen_Equal,              // -=
+	Double_Hyphen,             // --
+	Plus,                      // +
+	Plus_Equal,                // +=
+	Double_Plus,               // ++
+	Asterisk,                  // *
+	Asterisk_Equal,            // *=
+	Forward_Slash,             // /
+	Forward_Slash_Equal,       // /=
+	Percent,                   // %
+	Percent_Equal,             // %=
+	Ampersand,                 // &
+	Ampersand_Equal,           // &=
+	Pipe,                      // |
+	Pipe_Equal,                // |=
+	Caret,                     // ^
+	Caret_Equal,               // ^=
+	Double_Less_Than,          // <<
+	Double_Less_Than_Equal,    // <<=
+	Double_Greater_Than,       // >>
+	Double_Greater_Than_Equal, // >>=
+	Exclamation,               // !
+	Double_Ampersand,          // &&
+	Double_Pipe,               // ||
+	Double_Equal,              // ==
+	Exclamation_Equal,         // !=
+	Less_Than,                 // <
+	Greater_Than,              // >
+	Less_Than_Equal,           // <=
+	Greater_Than_Equal,        // >=
+	Equal,                     // =
 
 	Identifier,
 	Constant,
@@ -184,6 +195,47 @@ l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 		return l_read_constant(l)
 	}
 
+	handle_quadruple :: proc(l: ^Lexer, singular, singular_assign, double, double_assign: Token_Kind) -> Token_Kind {
+		switch peek := l_peek_ch(l); peek {
+		case l.ch:
+			l_next_ch(l)
+			switch peek = l_peek_ch(l); peek {
+			case '=':
+				l_next_ch(l)
+				return double_assign
+			case:
+				return double
+			}
+		case '=':
+			l_next_ch(l)
+			return singular_assign
+		case:
+			return singular
+		}
+	}
+
+	handle_triple :: proc(l: ^Lexer, singular, double, assign: Token_Kind) -> Token_Kind {
+		switch peek := l_peek_ch(l); peek {
+		case l.ch:
+			l_next_ch(l)
+			return double
+		case '=':
+			l_next_ch(l)
+			return assign
+		case:
+			return singular
+		}
+	}
+
+	handle_assign :: proc(l: ^Lexer, singular, assign: Token_Kind) -> Token_Kind {
+		switch peek := l_peek_ch(l); peek {
+		case '=':
+			l_next_ch(l)
+			return assign
+		case:     return singular
+		}
+	}
+
 	switch l.ch {
 	case '(':           t.kind = .Open_Paren
 	case ')':           t.kind = .Close_Paren
@@ -191,60 +243,22 @@ l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 	case '}':           t.kind = .Close_Brace
 	case ';':           t.kind = .Semicolon
 	case '~':           t.kind = .Tilde
-	case '+':           t.kind = .Plus
-	case '*':           t.kind = .Asterisk
-	case '/':           t.kind = .Forward_Slash
-	case '%':           t.kind = .Precent
-	case '^':           t.kind = .Caret
 	case utf8.RUNE_EOF: t.kind = .EOF
 
-	case '&':
-		if l_peek_ch(l) == '&' {
-			t.kind = .Double_Ampersand
-			l_next_ch(l)
-		} else {
-			t.kind = .Ampersand
-		}
-	case '|':
-		if l_peek_ch(l) == '|' {
-			t.kind = .Double_Pipe
-			l_next_ch(l)
-		} else {
-			t.kind = .Pipe
-		}
-	case '<':
-		switch l_peek_ch(l) {
-		case '<': t.kind = .Double_Less_Than; l_next_ch(l)
-		case '=': t.kind = .Less_Than_Equal;  l_next_ch(l)
-		case:     t.kind = .Less_Than
-		}
-	case '>':
-		switch l_peek_ch(l) {
-		case '>': t.kind = .Double_Greater_Than; l_next_ch(l)
-		case '=': t.kind = .Greater_Than_Equal;  l_next_ch(l)
-		case:     t.kind = .Greater_Than
-		}
-	case '-':
-		if l_peek_ch(l) == '-' {
-			t.kind = .Two_Hyphen
-			l_next_ch(l)
-		} else {
-			t.kind = .Hyphen
-		}
-	case '!':
-		if l_peek_ch(l) == '=' {
-			t.kind = .Exclamation_Equal
-			l_next_ch(l)
-		} else {
-			t.kind = .Exclamation
-		}
-	case '=':
-		if l_peek_ch(l) == '=' {
-			t.kind = .Double_Equal
-			l_next_ch(l)
-		} else {
-			t.kind = .Equal
-		}
+	case '*': t.kind = handle_assign(l, .Asterisk, .Asterisk_Equal)
+	case '/': t.kind = handle_assign(l, .Forward_Slash, .Forward_Slash_Equal)
+	case '%': t.kind = handle_assign(l, .Percent, .Percent_Equal)
+	case '^': t.kind = handle_assign(l, .Caret, .Caret_Equal)
+	case '!': t.kind = handle_assign(l, .Exclamation, .Exclamation_Equal)
+	case '=': t.kind = handle_assign(l, .Equal, .Double_Equal)
+
+	case '&': t.kind = handle_triple(l, .Ampersand, .Double_Ampersand, .Ampersand_Equal)
+	case '|': t.kind = handle_triple(l, .Pipe, .Double_Pipe, .Pipe_Equal)
+	case '-': t.kind = handle_triple(l, .Hyphen, .Double_Hyphen, .Hyphen_Equal)
+	case '+': t.kind = handle_triple(l, .Plus, .Double_Plus, .Plus_Equal)
+
+	case '<': t.kind = handle_quadruple(l, .Less_Than, .Less_Than_Equal, .Double_Less_Than, .Double_Less_Than_Equal)
+	case '>': t.kind = handle_quadruple(l, .Greater_Than, .Greater_Than_Equal, .Double_Greater_Than, .Double_Greater_Than_Equal)
 	
 	case:
 		l_error(l, "unexpected character %q", l.ch)

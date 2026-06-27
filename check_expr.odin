@@ -30,9 +30,37 @@ check_expr :: proc(c: ^Checker_Context, expr: ^Ast_Expr, o: ^Operand) {
 
 	case ^Ast_Expr_Unary:
 		check_expr(c, e.inner, o)
+
 		if o.mode == .Invalid {
+			return
+		}
+
+		#partial switch e.operator {
+		case .Increment, .Decrement:
+			if o.mode != .LValue {
+				check_error(c, o.expr.t, "expected l-value for %q operator", e.expr.t.content)
+
+				o.mode = .Invalid
+				return
+			}
+		}
+
+		o.mode = .RValue
+		return
+	case ^Ast_Expr_Postfix:
+		check_expr(c, e.inner, o)
+		if o.mode == .Invalid {
+			return
+		}
+
+		if o.mode != .LValue {
+			check_error(c, o.expr.t, "expected l-value for %q operator", e.expr.t.content)
+
 			o.mode = .Invalid
-		} else {
+			return
+		}
+		
+		if o.mode != .Invalid {
 			o.mode = .RValue
 		}
 		return
