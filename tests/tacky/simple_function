@@ -5,5 +5,6 @@ int main(void) {
 Tacky_Unit {
  Function "main" {
   return $2
+  return $0
  }
 }

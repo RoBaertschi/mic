@@ -7,5 +7,7 @@ Asm_Unit {
   allocate_stack 0
   mov 2 -> Register.AX
   ret
+  mov 0 -> Register.AX
+  ret
  }
 }
