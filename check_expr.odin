@@ -93,5 +93,18 @@ check_expr :: proc(c: ^Checker_Context, expr: ^Ast_Expr, o: ^Operand) {
 
 		o.mode = .RValue
 		return
+	case ^Ast_Expr_Conditional:
+		check_expr(c, e.condition, o)
+		then, else_: Operand
+		check_expr(c, e.then, &then)
+		check_expr(c, e.else_, &else_)
+
+		if o.mode == .Invalid || then.mode == .Invalid || else_.mode == .Invalid {
+			o.mode = .Invalid
+			return
+		}
+
+		o.mode = .RValue
+		return
 	}
 }

@@ -84,6 +84,7 @@ Ast_Stmt :: struct {
 		^Ast_Stmt_Error,
 		^Ast_Stmt_Expr,
 		^Ast_Stmt_Return,
+		^Ast_Stmt_If,
 	},
 }
 
@@ -104,6 +105,14 @@ Ast_Stmt_Return :: struct {
 	result: ^Ast_Expr,
 }
 
+Ast_Stmt_If :: struct {
+	using stmt: Ast_Stmt,
+
+	condition: ^Ast_Expr,
+	then:      ^Ast_Stmt,
+	else_:     ^Ast_Stmt,
+}
+
 Ast_Expr :: struct {
 	t: Token,
 
@@ -115,6 +124,7 @@ Ast_Expr :: struct {
 		^Ast_Expr_Postfix,
 		^Ast_Expr_Binary,
 		^Ast_Expr_Assignment,
+		^Ast_Expr_Conditional,
 	},
 }
 
@@ -214,6 +224,12 @@ Ast_Expr_Assignment :: struct {
 	lhs, rhs: ^Ast_Expr,
 }
 
+Ast_Expr_Conditional :: struct {
+	using expr: Ast_Expr,
+
+	condition, then, else_: ^Ast_Expr,
+}
+
 @(private="file")
 pad :: proc(w: io.Writer, depth: int) {
 	for i in 0..<depth {
@@ -295,6 +311,18 @@ ast_stmt_write_human_readable :: proc(stmt: ^Ast_Stmt, w: io.Writer, depth: int)
 		io.write_string(w, "Expr ")
 		ast_expr_write_human_readable(s.expr, w, depth)
 		io.write_string(w, "\n")
+	case ^Ast_Stmt_If:
+		io.write_string(w, "If ")
+		ast_expr_write_human_readable(s.condition, w, depth)
+		io.write_string(w, ":\n")
+		pad(w, depth+1)
+		ast_stmt_write_human_readable(s.then, w, depth+1)
+		if s.else_ != nil {
+			pad(w, depth)
+			io.write_string(w, "Else:\n")
+			pad(w, depth+1)
+			ast_stmt_write_human_readable(s.else_, w, depth+1)
+		}
 	case nil:
 		io.write_string(w, "Null\n")
 	}
@@ -334,6 +362,14 @@ ast_expr_write_human_readable :: proc(expr: ^Ast_Expr, w: io.Writer, depth: int)
 		ast_expr_write_human_readable(e.lhs, w, depth)
 		io.write_string(w, e.t.content)
 		ast_expr_write_human_readable(e.rhs, w, depth)
+		io.write_rune(w, ')')
+	case ^Ast_Expr_Conditional:
+		io.write_rune(w, '(')
+		ast_expr_write_human_readable(e.condition, w, depth)
+		io.write_rune(w, '?')
+		ast_expr_write_human_readable(e.then, w, depth)
+		io.write_rune(w, ':')
+		ast_expr_write_human_readable(e.else_, w, depth)
 		io.write_rune(w, ')')
 	}
 }

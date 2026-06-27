@@ -45,14 +45,18 @@ Token_Kind :: enum {
 	Less_Than_Equal,           // <=
 	Greater_Than_Equal,        // >=
 	Equal,                     // =
+	Question_Mark,             // ?
+	Colon,                     // :
 
 	Identifier,
 	Constant,
 
 	// Keywords
+	Else,
+	If,
 	Int,
-	Void,
 	Return,
+	Void,
 }
 
 Token :: struct {
@@ -157,6 +161,8 @@ l_read_identifier :: proc(l: ^Lexer) -> (t: Token) {
 	t.content = l.input[t.idx:l.idx]
 
 	switch t.content {
+	case "else":   t.kind = .Else
+	case "if":     t.kind = .If
 	case "int":    t.kind = .Int
 	case "void":   t.kind = .Void
 	case "return": t.kind = .Return
@@ -242,6 +248,8 @@ l_next_token :: proc(l: ^Lexer) -> (t: Token) {
 	case '{':           t.kind = .Open_Brace
 	case '}':           t.kind = .Close_Brace
 	case ';':           t.kind = .Semicolon
+	case ':':           t.kind = .Colon
+	case '?':           t.kind = .Question_Mark
 	case '~':           t.kind = .Tilde
 	case utf8.RUNE_EOF: t.kind = .EOF
 

@@ -10,5 +10,12 @@ check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt) {
 	case ^Ast_Stmt_Return:
 		o: Operand
 		check_expr(c, s.result, &o)
+	case ^Ast_Stmt_If:
+		o: Operand
+		check_expr(c, s.condition, &o)
+		check_stmt(c, s.then)
+		if s.else_ != nil {
+			check_stmt(c, s.else_)
+		}
 	}
 }

@@ -8,6 +8,7 @@ import "core:strconv"
 P_Precedence :: enum {
 	Lowest,
 	Assignment,
+	Conditional,
 	Or,
 	And,
 	Bitwise_Or,
@@ -33,6 +34,7 @@ p_precedences := #partial [Token_Kind]P_Precedence {
 	.Caret_Equal               = .Assignment,
 	.Double_Less_Than_Equal    = .Assignment,
 	.Double_Greater_Than_Equal = .Assignment,
+	.Question_Mark             = .Conditional,
 	.Double_Pipe               = .Or,
 	.Double_Ampersand          = .And,
 	.Pipe                      = .Bitwise_Or,
@@ -80,6 +82,7 @@ p_infix_procs := #partial [Token_Kind]P_Infix_Proc {
 	.Caret_Equal               = p_parse_assignment,
 	.Double_Less_Than_Equal    = p_parse_assignment,
 	.Double_Greater_Than_Equal = p_parse_assignment,
+	.Question_Mark             = p_parse_conditional,
 	.Plus                      = p_parse_binary,
 	.Hyphen                    = p_parse_binary,
 	.Asterisk                  = p_parse_binary,
@@ -336,6 +339,11 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 			p_skip_stmt(p)
 		}
 		return stmt
+	case .If:
+		stmt, _ := p_parse_if(p)
+		// NOTE(robin): cannot use skip because no semicolon or } required
+		// TODO(robin): find a better way to skip if stmt's
+		return stmt
 	case .Semicolon:
 		return ast_new(p.u, p.current_token, Ast_Stmt)
 	case:
@@ -366,6 +374,47 @@ p_parse_return :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 	}
 
 	_, ok = p_expect_peek(p, .Semicolon)
+
+	return
+}
+
+p_parse_if :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	if_token: Token
+	if_token, ok = p_expect(p, .If)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, if_token)
+		return
+	}
+
+	stmt_if := ast_new(p.u, if_token, Ast_Stmt_If)
+	stmt     = stmt_if
+
+	if _, ok = p_expect_peek(p, .Open_Paren); !ok {
+		return
+	}
+
+	p_next_token(p)
+
+	stmt_if.condition, ok = p_parse_expr(p, .Lowest)
+	if !ok {
+		return
+	}
+
+
+	if _, ok = p_expect_peek(p, .Close_Paren); !ok {
+		return
+	}
+
+	p_next_token(p)
+
+	stmt_if.then = p_parse_stmt(p)
+
+	if p.peek_token.kind == .Else {
+		p_next_token(p)
+		p_next_token(p)
+
+		stmt_if.else_ = p_parse_stmt(p)
+	}
 
 	return
 }
@@ -511,6 +560,24 @@ p_parse_assignment :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: 
 
 	p_next_token(p)
 	expr_assignment.rhs, ok = p_parse_expr(p, .Lowest)
+	return
+}
+
+p_parse_conditional :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool) {
+	ensure(p.current_token.kind == .Question_Mark)
+	expr_conditional           := ast_new(p.u, p.current_token, Ast_Expr_Conditional)
+	expr                      = expr_conditional
+	expr_conditional.condition  = lhs
+
+	p_next_token(p)
+	expr_conditional.then = p_parse_expr(p, .Lowest) or_return
+	if _, ok = p_expect_peek(p, .Colon); !ok {
+		expr_conditional.else_ = ast_new_expr_error(p.u, p.peek_token)
+		return
+	}
+
+	p_next_token(p)
+	expr_conditional.else_, ok = p_parse_expr(p, .Assignment)
 	return
 }
 

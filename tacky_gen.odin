@@ -91,6 +91,53 @@ tacky_gen_stmt :: proc(c: ^Tacky_Gen_Context, stmt: ^Ast_Stmt) {
 		)
 	case ^Ast_Stmt_Expr:
 		tacky_gen_expr(c, s.expr)
+	case ^Ast_Stmt_If:
+		condition := tacky_gen_expr(c, s.condition)
+		end_label := tacky_gen_make_label(c)
+
+		if s.else_ == nil {
+			tacky_gen_instructions(
+				c,
+				Tacky_Inst_Jump_If_Zero {
+					condition = condition,
+					target    = end_label,
+				},
+			)
+
+			tacky_gen_stmt(c, s.then)
+
+			tacky_gen_instructions(
+				c,
+				end_label,
+			)
+		} else {
+			else_label := tacky_gen_make_label(c)
+
+			tacky_gen_instructions(
+				c,
+				Tacky_Inst_Jump_If_Zero {
+					condition = condition,
+					target    = else_label,
+				},
+			)
+
+			tacky_gen_stmt(c, s.then)
+
+			tacky_gen_instructions(
+				c,
+				Tacky_Inst_Jump {
+					target = end_label,
+				},
+				else_label,
+			)
+
+			tacky_gen_stmt(c, s.else_)
+
+			tacky_gen_instructions(
+				c,
+				end_label,
+			)
+		}
 	}
 }
 
@@ -338,6 +385,47 @@ tacky_gen_expr :: proc(c: ^Tacky_Gen_Context, expr: ^Ast_Expr) -> Tacky_Value {
 		}
 
 		return var
+	case ^Ast_Expr_Conditional:
+		dst := tacky_gen_make_temporary(c)
+
+		condition := tacky_gen_expr(c, e.condition)
+
+		else_label := tacky_gen_make_label(c)
+		end_label  := tacky_gen_make_label(c)
+
+		tacky_gen_instructions(
+			c,
+			Tacky_Inst_Jump_If_Zero {
+				condition = condition,
+				target    = else_label,
+			},
+		)
+
+		then_value := tacky_gen_expr(c, e.then)
+
+		tacky_gen_instructions(
+			c,
+			Tacky_Inst_Copy {
+				src = then_value,
+				dst = dst,
+			},
+			Tacky_Inst_Jump {
+				target = end_label,
+			},
+			else_label,
+		)
+
+		else_value := tacky_gen_expr(c, e.else_)
+
+		tacky_gen_instructions(
+			c,
+			Tacky_Inst_Copy {
+				src = else_value,
+				dst = dst,
+			},
+			end_label,
+		)
+		return dst
 	}
 	fmt.panicf("invalid expr %v", expr.variant)
 }
