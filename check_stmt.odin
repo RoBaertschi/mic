@@ -35,5 +35,9 @@ check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt) {
 		} else {
 			check_new_unresolved_label(c, s)
 		}
+	case ^Ast_Stmt_Compound:
+		check_scope_guard(c)
+
+		check_block(c, &s.block)
 	}
 }

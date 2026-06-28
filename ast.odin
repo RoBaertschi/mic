@@ -87,6 +87,7 @@ Ast_Stmt :: struct {
 		^Ast_Stmt_If,
 		^Ast_Stmt_Label,
 		^Ast_Stmt_Goto,
+		^Ast_Stmt_Compound,
 	},
 }
 
@@ -132,6 +133,12 @@ Ast_Stmt_Goto :: struct {
 
 	// Checker
 	entity: ^Entity,
+}
+
+Ast_Stmt_Compound :: struct {
+	using stmt: Ast_Stmt,
+
+	block: xar.Array(Ast_Block_Item, 8),
 }
 
 Ast_Expr :: struct {
@@ -356,6 +363,19 @@ ast_stmt_write_human_readable :: proc(stmt: ^Ast_Stmt, w: io.Writer, depth: int)
 		io.write_string(w, "Goto ")
 		io.write_string(w, s.label.ident)
 		io.write_string(w, "\n")
+	case ^Ast_Stmt_Compound:
+		io.write_string(w, "{\n")
+		for it := xar.iterator(&s.block); block_item in xar.iterate_by_val(&it) {
+			pad(w, depth+1)
+			switch bi in block_item {
+			case ^Ast_Stmt:
+				ast_stmt_write_human_readable(bi, w, depth+1)
+			case ^Ast_Decl:
+				ast_decl_write_human_readable(bi, w, depth+1)
+			}
+		}
+		pad(w, depth)
+		io.write_string(w, "}\n")
 	}
 }
 

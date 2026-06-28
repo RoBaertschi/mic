@@ -332,6 +332,18 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 		}
 	}
 
+	p_skip_stmt_close_brace :: proc(p: ^Parser) {
+		for p.current_token.kind != .EOF {
+			#partial switch p.peek_token.kind {
+			case .Close_Brace:
+				p_next_token(p)
+				return
+			case:
+				p_next_token(p)
+			}
+		}
+	}
+
 	#partial switch p.current_token.kind {
 	case .Return:
 		stmt, ok := p_parse_return(p)
@@ -352,6 +364,12 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 			p_skip_stmt(p)
 		}
 		return stmt
+	case .Open_Brace:
+		stmt, ok := p_parse_compound(p)
+		if !ok {
+			p_skip_stmt_close_brace(p)
+		}
+		return stmt
 	case .Identifier:
 		if p.peek_token.kind == .Colon {
 			stmt, _ := p_parse_label(p)
@@ -368,6 +386,14 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 		}
 		return stmt_expr
 	}
+}
+
+p_parse_compound :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	stmt_block := ast_new(p.u, p.current_token, Ast_Stmt_Compound)
+	stmt        = stmt_block
+
+	stmt_block.block, ok = p_parse_block(p)
+	return
 }
 
 p_parse_goto :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {

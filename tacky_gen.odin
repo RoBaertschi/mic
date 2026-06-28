@@ -33,7 +33,7 @@ tacky_gen :: proc(u: ^Unit, out_u: ^Tacky_Unit) {
 		delete(c.entity_labels)
 	}
 
-	tacky_gen_body(&c, &u.function.body)
+	tacky_gen_block(&c, &u.function.body)
 	tacky_gen_instructions(&c, Tacky_Inst_Return(Tacky_Value_Constant(0)))
 }
 
@@ -53,7 +53,7 @@ tacky_gen_make_label :: proc(c: ^Tacky_Gen_Context) -> (label: Tacky_Label) {
 	return
 }
 
-tacky_gen_body :: proc(c: ^Tacky_Gen_Context, body: ^Ast_Block) {
+tacky_gen_block :: proc(c: ^Tacky_Gen_Context, body: ^Ast_Block) {
 	for it := xar.iterator(body); block_item in xar.iterate_by_val(&it) {
 		switch bi in block_item {
 		case ^Ast_Stmt:
@@ -175,6 +175,8 @@ tacky_gen_stmt :: proc(c: ^Tacky_Gen_Context, stmt: ^Ast_Stmt) {
 				target = label,
 			},
 		)
+	case ^Ast_Stmt_Compound:
+		tacky_gen_block(c, &s.block)
 	}
 }
 

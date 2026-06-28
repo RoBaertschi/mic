@@ -1,7 +1,7 @@
 int main(void) {
-test:
-    if (1) 3;
-    else 4;
-
-    goto test;
+    int a = 2;
+    if (1) {
+        int a = 3;
+        return a;
+    }
 }

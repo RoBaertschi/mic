@@ -3,14 +3,10 @@ package mic
 import "core:container/intrusive/list"
 import "core:container/xar"
 
-check_def_function :: proc(c: ^Checker_Context, f: ^Ast_Def_Function) {
-	c.label_scope      = scope_new(c.u, nil)
-	c.label_scope.kind = .Label
-
+check_block :: proc(c: ^Checker_Context, b: ^Ast_Block) {
 	check_scope_guard(c)
 
-	// TODO: currently not doing much
-	for it := xar.iterator(&f.body); block_item in xar.iterate_by_val(&it) {
+	for it := xar.iterator(b); block_item in xar.iterate_by_val(&it) {
 		switch bi in block_item {
 		case ^Ast_Stmt:
 			check_stmt(c, bi)
@@ -18,6 +14,14 @@ check_def_function :: proc(c: ^Checker_Context, f: ^Ast_Def_Function) {
 			check_decl(c, bi)
 		}
 	}
+}
+
+check_def_function :: proc(c: ^Checker_Context, f: ^Ast_Def_Function) {
+	c.label_scope      = scope_new(c.u, nil)
+	c.label_scope.kind = .Label
+
+	// TODO: currently not doing much
+	check_block(c, &f.body)
 
 	for it := list.iterator_head(c.unresolved_labels, Entity, "unresolved_node");
 	    e in list.iterate_next(&it)
