@@ -124,6 +124,28 @@ check_lookup_scope :: proc(c: ^Checker_Context, name: string) -> (^Entity, bool)
 	return nil, false
 }
 
+check_lookup_current_scope :: proc(c: ^Checker_Context, name: string) -> (^Entity, bool) {
+	s := c.scope
+	for s != nil && s.kind == .Snapshot {
+		assert(s.kind != .Label)
+
+		entity, ok := s.elements[name]
+		if ok {
+			return entity, ok
+		}
+		s = s.parent
+	}
+
+	if s != nil && s.kind == .Normal {
+		entity, ok := s.elements[name]
+		if ok {
+			return entity, ok
+		}
+	}
+
+	return nil, false
+}
+
 check_lookup_label :: proc(c: ^Checker_Context, name: ^Ast_Ident) -> (^Entity, bool) {
 	assert(c.label_scope.kind == .Label)
 	return c.label_scope.elements[name.ident]
