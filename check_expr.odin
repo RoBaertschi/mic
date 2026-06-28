@@ -1,5 +1,6 @@
 package mic
 
+import "core:fmt"
 check_expr :: proc(c: ^Checker_Context, expr: ^Ast_Expr, o: ^Operand) {
 	defer o.expr = expr
 
@@ -21,6 +22,8 @@ check_expr :: proc(c: ^Checker_Context, expr: ^Ast_Expr, o: ^Operand) {
 		switch variable.kind {
 		case .Invalid:
 			check_error(c, e.t, "invalid entity %q", e.name.ident)
+		case .Label:
+			fmt.panicf("label entity in non-label scope %v", variable)
 		case .Variable:
 			o.mode = .LValue
 		}

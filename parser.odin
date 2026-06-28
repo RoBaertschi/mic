@@ -346,6 +346,20 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 		return stmt
 	case .Semicolon:
 		return ast_new(p.u, p.current_token, Ast_Stmt)
+	case .Goto:
+		stmt, ok := p_parse_goto(p)
+		if !ok {
+			p_skip_stmt(p)
+		}
+		return stmt
+	case .Identifier:
+		if p.peek_token.kind == .Colon {
+			stmt, _ := p_parse_label(p)
+			// NOTE(robin): cannot use skip because no semicolon or } required
+			// TODO(robin): find a better way to skip if stmt's
+			return stmt
+		}
+		fallthrough
 	case:
 		stmt_expr := ast_new(p.u, p.current_token, Ast_Stmt_Expr)
 		stmt_expr.expr, _ = p_parse_expr(p, .Lowest)
@@ -354,6 +368,51 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 		}
 		return stmt_expr
 	}
+}
+
+p_parse_goto :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	goto_token: Token
+	goto_token, ok = p_expect(p, .Goto)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, goto_token)
+		return
+	}
+
+	stmt_goto := ast_new(p.u, goto_token, Ast_Stmt_Goto)
+	stmt       = stmt_goto
+
+	label_token: Token
+	label_token, ok = p_expect_peek(p, .Identifier)
+	if !ok {
+		return
+	}
+
+	stmt_goto.label = ast_new_ident(p.u, label_token)
+
+	_, ok = p_expect_peek(p, .Semicolon)
+	return
+}
+
+p_parse_label :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	label_token: Token
+	label_token, ok = p_expect(p, .Identifier)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, label_token)
+		return
+	}
+
+	stmt_label      := ast_new(p.u, label_token, Ast_Stmt_Label)
+	stmt             = stmt_label
+	stmt_label.name  = ast_new_ident(p.u, label_token)
+	
+	_, ok = p_expect_peek(p, .Colon)
+	if !ok {
+		return
+	}
+
+	p_next_token(p)
+	stmt_label.inner = p_parse_stmt(p)
+	return
 }
 
 p_parse_return :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {

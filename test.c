@@ -1,6 +1,7 @@
 int main(void) {
-    int a = 3;
+test:
+    if (1) 3;
+    else 4;
 
-    if (a) a = 0;
-    return a ? a : a ? a : a;
+    goto test;
 }

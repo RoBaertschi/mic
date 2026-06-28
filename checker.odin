@@ -1,21 +1,27 @@
 #+vet explicit-allocators
 package mic
 
+import "core:container/intrusive/list"
 import "core:mem/virtual"
 
 Entity_Kind :: enum {
 	Invalid,
 	Variable,
+	Label,
 }
 
 Entity :: struct {
 	kind:  Entity_Kind,
 	name:  ^Ast_Ident,
 	decl:  ^Ast_Decl,
+	stmt:  ^Ast_Stmt_Label, // For label
 	scope: ^Scope,
+
+	// Label data
+	unresolved_node: list.Node,
 }
 
-entity_new :: proc(u: ^Unit, kind: Entity_Kind, name: ^Ast_Ident, decl: ^Ast_Decl) -> ^Entity {
+entity_new_decl :: proc(u: ^Unit, kind: Entity_Kind, name: ^Ast_Ident, decl: ^Ast_Decl) -> ^Entity {
 	ptr, err := virtual.new(&u.arena, Entity)
 	ensure(err == nil)
 	ptr^ = {
@@ -25,6 +31,10 @@ entity_new :: proc(u: ^Unit, kind: Entity_Kind, name: ^Ast_Ident, decl: ^Ast_Dec
 	}
 	decl.entity = ptr
 	return ptr
+}
+
+entity_new :: proc{
+	entity_new_decl,
 }
 
 Scope_Kind :: enum {
@@ -79,6 +89,10 @@ Checker_Info :: struct {
 Checker_Context :: struct {
 	info: ^Checker_Info,
 
+	// Labels
+	label_scope:       ^Scope,
+	unresolved_labels: list.List,
+
 	scope: ^Scope,
 	u:     ^Unit,
 }
@@ -99,6 +113,8 @@ check_insert_scope :: proc(c: ^Checker_Context, e: ^Entity) {
 check_lookup_scope :: proc(c: ^Checker_Context, name: string) -> (^Entity, bool) {
 	s := c.scope
 	for s != nil {
+		assert(s.kind != .Label)
+
 		entity, ok := s.elements[name]
 		if ok {
 			return entity, ok
@@ -106,6 +122,54 @@ check_lookup_scope :: proc(c: ^Checker_Context, name: string) -> (^Entity, bool)
 		s = s.parent
 	}
 	return nil, false
+}
+
+check_lookup_label :: proc(c: ^Checker_Context, name: ^Ast_Ident) -> (^Entity, bool) {
+	assert(c.label_scope.kind == .Label)
+	return c.label_scope.elements[name.ident]
+}
+
+check_insert_label :: proc(c: ^Checker_Context, e: ^Entity) {
+	c.label_scope.elements[e.name.ident] = e
+}
+
+check_resolve_label :: proc(c: ^Checker_Context, e: ^Entity, stmt: ^Ast_Stmt_Label) {
+	assert(e.kind == .Label)
+	assert(e.decl == nil)
+	e.stmt      = stmt
+	stmt.entity = e
+
+	list.remove(&c.unresolved_labels, &e.unresolved_node)
+	e.unresolved_node = {} // Zero just in case
+}
+
+check_new_label :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt_Label) -> ^Entity {
+	ptr, err := virtual.new(&c.u.arena, Entity)
+	ensure(err == nil)
+	ptr^ = {
+		kind = .Label,
+		name = stmt.name,
+		stmt = stmt,
+	}
+	stmt.entity = ptr
+
+	check_insert_label(c, ptr)
+	return ptr
+}
+
+check_new_unresolved_label :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt_Goto) -> ^Entity {
+	ptr, err := virtual.new(&c.u.arena, Entity)
+	ensure(err == nil)
+	ptr^ = {
+		kind = .Label,
+		name = stmt.label,
+	}
+	stmt.entity = ptr
+
+	list.push_back(&c.unresolved_labels, &ptr.unresolved_node)
+
+	check_insert_label(c, ptr)
+	return ptr
 }
 
 @(deferred_in=check_pop_scope)

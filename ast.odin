@@ -85,6 +85,8 @@ Ast_Stmt :: struct {
 		^Ast_Stmt_Expr,
 		^Ast_Stmt_Return,
 		^Ast_Stmt_If,
+		^Ast_Stmt_Label,
+		^Ast_Stmt_Goto,
 	},
 }
 
@@ -111,6 +113,25 @@ Ast_Stmt_If :: struct {
 	condition: ^Ast_Expr,
 	then:      ^Ast_Stmt,
 	else_:     ^Ast_Stmt,
+}
+
+Ast_Stmt_Label :: struct {
+	using stmt: Ast_Stmt,
+
+	name:  ^Ast_Ident,
+	inner: ^Ast_Stmt,
+
+	// Checker
+	entity: ^Entity,
+}
+
+Ast_Stmt_Goto :: struct {
+	using stmt: Ast_Stmt,
+
+	label: ^Ast_Ident,
+
+	// Checker
+	entity: ^Entity,
 }
 
 Ast_Expr :: struct {
@@ -325,6 +346,16 @@ ast_stmt_write_human_readable :: proc(stmt: ^Ast_Stmt, w: io.Writer, depth: int)
 		}
 	case nil:
 		io.write_string(w, "Null\n")
+	case ^Ast_Stmt_Label:
+		io.write_string(w, "Label ")
+		io.write_string(w, s.name.ident)
+		io.write_string(w, ":\n")
+			pad(w, depth+1)
+		ast_stmt_write_human_readable(s.inner, w, depth+1)
+	case ^Ast_Stmt_Goto:
+		io.write_string(w, "Goto ")
+		io.write_string(w, s.label.ident)
+		io.write_string(w, "\n")
 	}
 }
 

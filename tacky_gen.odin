@@ -7,11 +7,12 @@ import "core:fmt"
 import "core:container/xar"
 
 Tacky_Gen_Context :: struct {
-	u:        ^Tacky_Unit,
-	entities: map[^Entity]Tacky_Value,
-	function: ^Tacky_Def_Function,
-	locals:   Tacky_Value_Variable,
-	labels:   Tacky_Label,
+	u:             ^Tacky_Unit,
+	entity_values: map[^Entity]Tacky_Value,
+	entity_labels: map[^Entity]Tacky_Label,
+	function:      ^Tacky_Def_Function,
+	locals:        Tacky_Value_Variable,
+	labels:        Tacky_Label,
 }
 
 tacky_gen :: proc(u: ^Unit, out_u: ^Tacky_Unit) {
@@ -23,10 +24,14 @@ tacky_gen :: proc(u: ^Unit, out_u: ^Tacky_Unit) {
 
 	c := Tacky_Gen_Context {
 		function = function,
-		entities = make(map[^Entity]Tacky_Value, allocator = runtime.heap_allocator()),
+		entity_values = make(map[^Entity]Tacky_Value, allocator = runtime.heap_allocator()),
+		entity_labels = make(map[^Entity]Tacky_Label, allocator = runtime.heap_allocator()),
 		u        = out_u,
 	}
-	defer delete(c.entities)
+	defer {
+		delete(c.entity_values)
+		delete(c.entity_labels)
+	}
 
 	tacky_gen_body(&c, &u.function.body)
 	tacky_gen_instructions(&c, Tacky_Inst_Return(Tacky_Value_Constant(0)))
@@ -65,7 +70,7 @@ tacky_gen_decl :: proc(c: ^Tacky_Gen_Context, decl: ^Ast_Decl) {
 	case ^Ast_Decl_Variable:
 		ensure(d.entity != nil)
 		var                  := tacky_gen_make_temporary(c)
-		c.entities[d.entity]  = var
+		c.entity_values[d.entity]  = var
 		if d.init != nil {
 			init := tacky_gen_expr(c, d.init)
 			tacky_gen_instructions(
@@ -80,6 +85,17 @@ tacky_gen_decl :: proc(c: ^Tacky_Gen_Context, decl: ^Ast_Decl) {
 }
 
 tacky_gen_stmt :: proc(c: ^Tacky_Gen_Context, stmt: ^Ast_Stmt) {
+	lazy_label :: proc(c: ^Tacky_Gen_Context, e: ^Entity) -> Tacky_Label {
+		ensure(e != nil)
+		label, ok := c.entity_labels[e]
+		if !ok {
+			label              = tacky_gen_make_label(c)
+			c.entity_labels[e] = label
+		}
+
+		return label
+	}
+
 	switch s in stmt.variant {
 	case nil: // valid, but do nothing
 	case ^Ast_Stmt_Error:  panic("Error stmt")
@@ -138,6 +154,27 @@ tacky_gen_stmt :: proc(c: ^Tacky_Gen_Context, stmt: ^Ast_Stmt) {
 				end_label,
 			)
 		}
+	case ^Ast_Stmt_Label:
+		label := lazy_label(c, s.entity)
+
+		tacky_gen_instructions(
+			c,
+			label,
+		)
+
+		tacky_gen_stmt(
+			c,
+			s.inner,
+		)
+	case ^Ast_Stmt_Goto:
+		label := lazy_label(c, s.entity)
+
+		tacky_gen_instructions(
+			c,
+			Tacky_Inst_Jump {
+				target = label,
+			},
+		)
 	}
 }
 
@@ -145,7 +182,7 @@ tacky_gen_get_lvalue :: proc(c: ^Tacky_Gen_Context, expr: ^Ast_Expr) -> Tacky_Va
 	#partial switch e in expr.variant {
 	case ^Ast_Expr_Variable:
 		ensure(e.entity != nil)
-		value, ok := c.entities[e.entity]
+		value, ok := c.entity_values[e.entity]
 		ensure(ok)
 		return value
 	case:
@@ -342,7 +379,7 @@ tacky_gen_expr :: proc(c: ^Tacky_Gen_Context, expr: ^Ast_Expr) -> Tacky_Value {
 			return dst
 		}
 	case ^Ast_Expr_Variable:
-		var := c.entities[e.entity]
+		var := c.entity_values[e.entity]
 		ensure(var != nil)
 		return var
 	case ^Ast_Expr_Assignment:

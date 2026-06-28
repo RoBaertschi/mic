@@ -53,6 +53,7 @@ Token_Kind :: enum {
 
 	// Keywords
 	Else,
+	Goto,
 	If,
 	Int,
 	Return,
@@ -162,6 +163,7 @@ l_read_identifier :: proc(l: ^Lexer) -> (t: Token) {
 
 	switch t.content {
 	case "else":   t.kind = .Else
+	case "goto":   t.kind = .Goto
 	case "if":     t.kind = .If
 	case "int":    t.kind = .Int
 	case "void":   t.kind = .Void
