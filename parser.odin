@@ -527,7 +527,7 @@ p_parse_for :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 		p_next_token(p)
 		stmt_for.condition, ok = p_parse_expr(p, .Lowest)
 		ok or_return
-		p_expect_peek(p, .Semicolon)
+		p_expect_peek(p, .Semicolon) or_return
 	} else {
 		p_next_token(p)
 	}
@@ -538,7 +538,7 @@ p_parse_for :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 		p_next_token(p)
 		stmt_for.post, ok = p_parse_expr(p, .Lowest)
 		ok or_return
-		p_expect_peek(p, .Close_Paren)
+		p_expect_peek(p, .Close_Paren) or_return
 	} else {
 		p_next_token(p)
 	}
