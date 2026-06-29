@@ -431,14 +431,14 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 }
 
 p_parse_switch :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	switch_token: Token
-	switch_token, ok = p_expect(p, .Switch)
+	token_switch: Token
+	token_switch, ok = p_expect(p, .Switch)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, switch_token)
+		stmt = ast_new_stmt_error(p.u, token_switch)
 		return
 	}
 
-	stmt_switch := ast_new(p.u, switch_token, Ast_Stmt_Switch)
+	stmt_switch := ast_new(p.u, token_switch, Ast_Stmt_Switch)
 	stmt         = stmt_switch
 
 	p_expect_peek(p, .Open_Paren) or_return
@@ -454,14 +454,14 @@ p_parse_switch :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_default :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	default_token: Token
-	default_token, ok = p_expect(p, .Default)
+	token_default: Token
+	token_default, ok = p_expect(p, .Default)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, default_token)
+		stmt = ast_new_stmt_error(p.u, token_default)
 		return
 	}
 
-	stmt_case      := ast_new(p.u, default_token, Ast_Stmt_Default)
+	stmt_case      := ast_new(p.u, token_default, Ast_Stmt_Default)
 	stmt             = stmt_case
 	
 	_, ok = p_expect_peek(p, .Colon)
@@ -473,14 +473,14 @@ p_parse_default :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_case :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	case_token: Token
-	case_token, ok = p_expect(p, .Case)
+	token_case: Token
+	token_case, ok = p_expect(p, .Case)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, case_token)
+		stmt = ast_new_stmt_error(p.u, token_case)
 		return
 	}
 
-	stmt_case      := ast_new(p.u, case_token, Ast_Stmt_Case)
+	stmt_case      := ast_new(p.u, token_case, Ast_Stmt_Case)
 	stmt             = stmt_case
 
 	p_next_token(p)
@@ -497,14 +497,14 @@ p_parse_case :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_for :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	for_token: Token
-	for_token, ok = p_expect(p, .For)
+	token_for: Token
+	token_for, ok = p_expect(p, .For)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, for_token)
+		stmt = ast_new_stmt_error(p.u, token_for)
 		return
 	}
 
-	stmt_for := ast_new(p.u, for_token, Ast_Stmt_For)
+	stmt_for := ast_new(p.u, token_for, Ast_Stmt_For)
 	stmt      = stmt_for
 
 	p_expect_peek(p, .Open_Paren) or_return
@@ -549,14 +549,14 @@ p_parse_for :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_do_while :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	do_token: Token
-	do_token, ok = p_expect(p, .Do)
+	token_do: Token
+	token_do, ok = p_expect(p, .Do)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, do_token)
+		stmt = ast_new_stmt_error(p.u, token_do)
 		return
 	}
 
-	stmt_while := ast_new(p.u, do_token, Ast_Stmt_Do_While)
+	stmt_while := ast_new(p.u, token_do, Ast_Stmt_Do_While)
 	stmt        = stmt_while
 
 	p_next_token(p)
@@ -574,14 +574,14 @@ p_parse_do_while :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_while :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	while_token: Token
-	while_token, ok = p_expect(p, .While)
+	token_while: Token
+	token_while, ok = p_expect(p, .While)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, while_token)
+		stmt = ast_new_stmt_error(p.u, token_while)
 		return
 	}
 
-	stmt_while := ast_new(p.u, while_token, Ast_Stmt_While)
+	stmt_while := ast_new(p.u, token_while, Ast_Stmt_While)
 	stmt        = stmt_while
 
 	p_expect_peek(p, .Open_Paren) or_return
@@ -600,12 +600,12 @@ p_parse_while :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_keyword :: proc(p: ^Parser, kind: Token_Kind, $T: typeid) -> (^Ast_Stmt, bool) {
-	keyword_token, ok := p_expect(p, kind)
+	token_keyword, ok := p_expect(p, kind)
 	if !ok {
-		return ast_new_stmt_error(p.u, keyword_token), false
+		return ast_new_stmt_error(p.u, token_keyword), false
 	}
 
-	stmt_keyword := ast_new(p.u, keyword_token, T)
+	stmt_keyword := ast_new(p.u, token_keyword, T)
 
 	_, ok = p_expect_peek(p, .Semicolon)
 	return stmt_keyword, ok
@@ -620,36 +620,36 @@ p_parse_compound :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_goto :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	goto_token: Token
-	goto_token, ok = p_expect(p, .Goto)
+	token_goto: Token
+	token_goto, ok = p_expect(p, .Goto)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, goto_token)
+		stmt = ast_new_stmt_error(p.u, token_goto)
 		return
 	}
 
-	stmt_goto := ast_new(p.u, goto_token, Ast_Stmt_Goto)
+	stmt_goto := ast_new(p.u, token_goto, Ast_Stmt_Goto)
 	stmt       = stmt_goto
 
-	label_token: Token
-	label_token = p_expect_peek(p, .Identifier) or_return
+	token_label: Token
+	token_label = p_expect_peek(p, .Identifier) or_return
 
-	stmt_goto.label = ast_new_ident(p.u, label_token)
+	stmt_goto.label = ast_new_ident(p.u, token_label)
 
 	p_expect_peek(p, .Semicolon) or_return
 	return
 }
 
 p_parse_label :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	label_token: Token
-	label_token, ok = p_expect(p, .Identifier)
+	token_label: Token
+	token_label, ok = p_expect(p, .Identifier)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, label_token)
+		stmt = ast_new_stmt_error(p.u, token_label)
 		return
 	}
 
-	stmt_label      := ast_new(p.u, label_token, Ast_Stmt_Label)
+	stmt_label      := ast_new(p.u, token_label, Ast_Stmt_Label)
 	stmt             = stmt_label
-	stmt_label.name  = ast_new_ident(p.u, label_token)
+	stmt_label.name  = ast_new_ident(p.u, token_label)
 	
 	_, ok = p_expect_peek(p, .Colon)
 	ok or_return
@@ -660,14 +660,14 @@ p_parse_label :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_return :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	return_token: Token
-	return_token, ok = p_expect(p, .Return)
+	token_return: Token
+	token_return, ok = p_expect(p, .Return)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, return_token)
+		stmt = ast_new_stmt_error(p.u, token_return)
 		return
 	}
 
-	stmt_return := ast_new(p.u, return_token, Ast_Stmt_Return)
+	stmt_return := ast_new(p.u, token_return, Ast_Stmt_Return)
 	stmt         = stmt_return
 	p_next_token(p)
 
@@ -680,14 +680,14 @@ p_parse_return :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 }
 
 p_parse_if :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
-	if_token: Token
-	if_token, ok = p_expect(p, .If)
+	token_if: Token
+	token_if, ok = p_expect(p, .If)
 	if !ok {
-		stmt = ast_new_stmt_error(p.u, if_token)
+		stmt = ast_new_stmt_error(p.u, token_if)
 		return
 	}
 
-	stmt_if := ast_new(p.u, if_token, Ast_Stmt_If)
+	stmt_if := ast_new(p.u, token_if, Ast_Stmt_If)
 	stmt     = stmt_if
 
 	p_expect_peek(p, .Open_Paren) or_return
