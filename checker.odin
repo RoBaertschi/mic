@@ -1,6 +1,7 @@
 #+vet explicit-allocators
 package mic
 
+import "core:container/xar"
 import "core:container/intrusive/list"
 import "core:mem/virtual"
 
@@ -64,13 +65,13 @@ Adressing_Mode :: enum {
 	Invalid,
 	RValue,
 	LValue,
-	// Const, // TODO: constant folding in the future
+	Const, // TODO: constant folding in the future
 }
 
 Operand :: struct {
 	expr:        ^Ast_Expr,
 	mode:        Adressing_Mode,
-	// const_value: int,
+	const_value: int,
 }
 
 Unit :: struct {
@@ -93,6 +94,10 @@ Checker_Context :: struct {
 	label_scope:       ^Scope,
 	unresolved_labels: list.List,
 
+	// Switch
+	switch_current_cases:   xar.Array(int, 8), // TODO: replace with expr when BIG_TODO#1 is done.
+	switch_current_default: ^Ast_Stmt_Default,
+
 	scope: ^Scope,
 	u:     ^Unit,
 }
@@ -100,6 +105,7 @@ Checker_Context :: struct {
 Check_Stmt_Flag :: enum {
 	Break_Allowed,
 	Continue_Allowed,
+	Case_Allowed,
 }
 
 Check_Stmt_Flags :: bit_set[Check_Stmt_Flag]
@@ -115,6 +121,11 @@ check_pop_scope :: proc(c: ^Checker_Context) {
 check_insert_scope :: proc(c: ^Checker_Context, e: ^Entity) {
 	c.scope.elements[e.name.ident] = e
 	e.scope                        = c.scope
+}
+
+@(deferred_in=check_pop_scope)
+check_scope_guard :: proc(c: ^Checker_Context) {
+	check_push_scope(c)
 }
 
 check_lookup_scope :: proc(c: ^Checker_Context, name: string) -> (^Entity, bool) {
@@ -199,11 +210,6 @@ check_new_unresolved_label :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt_Goto) ->
 
 	check_insert_label(c, ptr)
 	return ptr
-}
-
-@(deferred_in=check_pop_scope)
-check_scope_guard :: proc(c: ^Checker_Context) {
-	check_push_scope(c)
 }
 
 check_error :: proc(c: ^Checker_Context, t: Token, format: string, args: ..any) {

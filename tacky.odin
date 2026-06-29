@@ -1,3 +1,4 @@
+#+vet explicit-allocators
 package mic
 
 import "core:fmt"

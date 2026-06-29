@@ -1,3 +1,4 @@
+#+vet explicit-allocators
 package mic_tests_lex
 
 import "core:path/filepath"

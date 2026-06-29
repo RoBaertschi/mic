@@ -1,6 +1,8 @@
+#+vet explicit-allocators
 package mic
 
 import "core:fmt"
+
 check_expr :: proc(c: ^Checker_Context, expr: ^Ast_Expr, o: ^Operand) {
 	defer o.expr = expr
 
@@ -9,7 +11,8 @@ check_expr :: proc(c: ^Checker_Context, expr: ^Ast_Expr, o: ^Operand) {
 		check_error(c, e.t, "invalid expression")
 		o.mode = .Invalid
 	case ^Ast_Expr_Constant:
-		o.mode = .RValue
+		o.mode        = .Const
+		o.const_value = e.value
 		return
 	case ^Ast_Expr_Variable:
 		variable, ok := check_lookup_scope(c, e.name.ident)

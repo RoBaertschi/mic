@@ -860,7 +860,7 @@ p_parse_assignment :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: 
 p_parse_conditional :: proc(p: ^Parser, lhs: ^Ast_Expr) -> (expr: ^Ast_Expr, ok: bool) {
 	ensure(p.current_token.kind == .Question_Mark)
 	expr_conditional           := ast_new(p.u, p.current_token, Ast_Expr_Conditional)
-	expr                      = expr_conditional
+	expr                        = expr_conditional
 	expr_conditional.condition  = lhs
 
 	p_next_token(p)

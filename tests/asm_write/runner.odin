@@ -1,3 +1,4 @@
+#+vet explicit-allocators
 package mic_tests_asm_write
 
 import "core:path/filepath"

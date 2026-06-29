@@ -1,3 +1,4 @@
+#+vet explicit-allocators
 package mic
 
 tacky_gen_decl :: proc(c: ^Tacky_Gen_Context, decl: ^Ast_Decl) {
@@ -19,4 +20,3 @@ tacky_gen_decl :: proc(c: ^Tacky_Gen_Context, decl: ^Ast_Decl) {
 		}
 	}
 }
-

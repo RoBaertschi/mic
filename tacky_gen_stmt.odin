@@ -1,3 +1,4 @@
+#+vet explicit-allocators
 package mic
 
 import "core:container/xar"
@@ -246,4 +247,3 @@ tacky_gen_stmt :: proc(c: ^Tacky_Gen_Context, stmt: ^Ast_Stmt) {
 	case ^Ast_Stmt_Default: unimplemented()
 	}
 }
-

@@ -1,5 +1,7 @@
+#+vet explicit-allocators
 package mic
 
+import "core:container/xar"
 check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt, flags: Check_Stmt_Flags) {
 	switch s in stmt.variant {
 	case ^Ast_Stmt_Error:
@@ -81,8 +83,61 @@ check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt, flags: Check_Stmt_Flags
 		}
 
 		check_stmt(c, s.body, flags)
-	case ^Ast_Stmt_Switch:  unimplemented()
-	case ^Ast_Stmt_Case:    unimplemented()
-	case ^Ast_Stmt_Default: unimplemented()
+	case ^Ast_Stmt_Switch:
+		temp := TEMP_ALLOCATOR_GUARD()
+
+		flags := flags
+		flags += {.Case_Allowed, .Break_Allowed}
+
+		old_cases   := c.switch_current_cases
+		old_default := c.switch_current_default
+		defer {
+			c.switch_current_cases   = old_cases
+			c.switch_current_default = old_default
+		}
+
+		c.switch_current_cases = {}
+		c.switch_current_default = nil
+
+		xar.init(&c.switch_current_cases, temp)
+
+		check_expr(c, s.expr, &{})
+		check_stmt(c, s.body, flags)
+	case ^Ast_Stmt_Case:
+		if .Case_Allowed not_in flags {
+			check_error(c, s.t, "case outside of switch statement")
+		}
+
+		check_stmt(c, s.inner, flags)
+
+		o: Operand
+		check_expr(c, s.condition, &o)
+
+		if o.mode != .Const {
+			check_error(c, o.expr.t, "only constant values allowed for case")
+			return
+		}
+
+		for it := xar.iterator(&c.switch_current_cases); value in xar.iterate_by_val(&it) {
+			if value == o.const_value {
+				check_error(c, s.t, "duplicate case value %v", value)
+				return
+			}
+		}
+
+		xar.push_back(&c.switch_current_cases, o.const_value)
+	case ^Ast_Stmt_Default:
+		if .Case_Allowed not_in flags {
+			check_error(c, s.t, "default outside of switch statement")
+		}
+
+		check_stmt(c, s.inner, flags)
+
+		if c.switch_current_default != nil {
+			check_error(c, s.t, "multiple default labels in switch found")
+			return
+		}
+
+		c.switch_current_default = s
 	}
 }
