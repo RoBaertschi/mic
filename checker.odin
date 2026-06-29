@@ -68,10 +68,14 @@ Adressing_Mode :: enum {
 	Const, // TODO: constant folding in the future
 }
 
+Const_Value :: union {
+	int,
+}
+
 Operand :: struct {
 	expr:        ^Ast_Expr,
 	mode:        Adressing_Mode,
-	const_value: int,
+	const_value: Const_Value,
 }
 
 Unit :: struct {
@@ -95,7 +99,7 @@ Checker_Context :: struct {
 	unresolved_labels: list.List,
 
 	// Switch
-	switch_current_cases:   xar.Array(int, 8), // TODO: replace with expr when BIG_TODO#1 is done.
+	switch_current_cases:   xar.Array(^Ast_Stmt_Case, 8),
 	switch_current_default: ^Ast_Stmt_Default,
 
 	scope: ^Scope,

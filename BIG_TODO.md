@@ -1,1 +1,1 @@
-- [ ] #1: Store the most important Operand information inside expressions themself
+- [x] #1: Store the most important Operand information inside expressions themself

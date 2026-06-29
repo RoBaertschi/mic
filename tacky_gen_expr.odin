@@ -20,7 +20,7 @@ tacky_gen_expr :: proc(c: ^Tacky_Gen_Context, expr: ^Ast_Expr) -> Tacky_Value {
 	case nil:             panic("nil expr")
 	case ^Ast_Expr_Error: panic("error expr")
 	case ^Ast_Expr_Constant:
-		return Tacky_Value_Constant(e.value)
+		return Tacky_Value_Constant(e.constant)
 	case ^Ast_Expr_Unary:
 		switch e.operator {
 		case .Complement, .Negate, .Not:

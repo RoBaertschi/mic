@@ -17,6 +17,9 @@ Tacky_Gen_Context :: struct {
 	arena:            virtual.Arena,
 	targets_continue: xar.Array(Tacky_Label, 8),
 	targets_break:    xar.Array(Tacky_Label, 8),
+
+	switch_cases_map:    map[^Ast_Stmt_Case]Tacky_Label,
+	switch_default_case: Tacky_Label,
 }
 
 tacky_context_allocator :: proc(c: ^Tacky_Gen_Context) -> runtime.Allocator {
@@ -31,10 +34,10 @@ tacky_gen :: proc(u: ^Unit, out_u: ^Tacky_Unit) {
 	xar.init(&function.instructions, tacky_allocator(out_u))
 
 	c := Tacky_Gen_Context {
-		function = function,
+		function      = function,
 		entity_values = make(map[^Entity]Tacky_Value, allocator = runtime.heap_allocator()),
 		entity_labels = make(map[^Entity]Tacky_Label, allocator = runtime.heap_allocator()),
-		u        = out_u,
+		u             = out_u,
 	}
 
 	xar.init(&c.targets_break, tacky_context_allocator(&c))

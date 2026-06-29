@@ -4,7 +4,15 @@ package mic
 import "core:fmt"
 
 check_expr :: proc(c: ^Checker_Context, expr: ^Ast_Expr, o: ^Operand) {
-	defer o.expr = expr
+	o^ = {}
+
+	defer {
+		o.expr = expr
+		
+		if o.mode == .Const {
+			expr.value = o.const_value
+		}
+	}
 
 	switch e in expr.variant {
 	case ^Ast_Expr_Error:
@@ -12,7 +20,7 @@ check_expr :: proc(c: ^Checker_Context, expr: ^Ast_Expr, o: ^Operand) {
 		o.mode = .Invalid
 	case ^Ast_Expr_Constant:
 		o.mode        = .Const
-		o.const_value = e.value
+		o.const_value = e.constant
 		return
 	case ^Ast_Expr_Variable:
 		variable, ok := check_lookup_scope(c, e.name.ident)

@@ -186,6 +186,10 @@ Ast_Stmt_Switch :: struct {
 
 	expr: ^Ast_Expr,
 	body: ^Ast_Stmt,
+
+	// Checker
+	cases:   xar.Array(^Ast_Stmt_Case, 8),
+	default: ^Ast_Stmt_Default,
 }
 
 Ast_Stmt_Case :: struct {
@@ -203,6 +207,9 @@ Ast_Stmt_Default :: struct {
 
 Ast_Expr :: struct {
 	t: Token,
+
+	// Checker
+	value: Const_Value,
 
 	variant: union {
 		^Ast_Expr_Error,
@@ -225,7 +232,7 @@ ast_new_expr_error :: proc(u: ^Unit, token: Token) -> ^Ast_Expr_Error {
 Ast_Expr_Constant :: struct {
 	using expr: Ast_Expr,
 
-	value: int,
+	constant: int,
 }
 
 Ast_Expr_Variable :: struct {
@@ -517,7 +524,7 @@ ast_expr_write_human_readable :: proc(expr: ^Ast_Expr, w: io.Writer, depth: int)
 	case ^Ast_Expr_Error:
 		io.write_string(w, "<error expr>")
 	case ^Ast_Expr_Constant:
-		io.write_int(w, e.value)
+		io.write_int(w, e.constant)
 	case ^Ast_Expr_Unary:
 		io.write_string(w, e.t.content)
 		io.write_rune(w, '(')

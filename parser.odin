@@ -890,9 +890,9 @@ p_parse_constant :: proc(p: ^Parser) -> (expr: ^Ast_Expr, ok: bool) {
 		return
 	}
 
-	expr_constant       := ast_new(p.u, token, Ast_Expr_Constant)
-	expr_constant.value  = value
-	expr                 = expr_constant
+	expr_constant          := ast_new(p.u, token, Ast_Expr_Constant)
+	expr_constant.constant  = value
+	expr                    = expr_constant
 	return
 }
 

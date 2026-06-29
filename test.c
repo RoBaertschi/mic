@@ -1,10 +1,12 @@
 int main(void) {
-    for (int a = 0; a < 3; a++) {
-        break;
-        continue;
+    int a = 0;
+
+    switch (1) {
+    case 1: a = 1; break;
+    case 3: a = 1; break;
+    case 4: a = 1; break;
+    default: a = 2; break;
     }
 
-    switch (1) { case 1: 1; default: 2; default: 3; case 1: 3; case 1 + 1: 4; }
-
-    for (;;);
+    return a;
 }

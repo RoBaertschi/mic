@@ -1,7 +1,10 @@
 #+vet explicit-allocators
 package mic
 
+import "base:intrinsics"
+
 import "core:container/xar"
+
 check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt, flags: Check_Stmt_Flags) {
 	switch s in stmt.variant {
 	case ^Ast_Stmt_Error:
@@ -84,7 +87,7 @@ check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt, flags: Check_Stmt_Flags
 
 		check_stmt(c, s.body, flags)
 	case ^Ast_Stmt_Switch:
-		temp := TEMP_ALLOCATOR_GUARD()
+		// temp := TEMP_ALLOCATOR_GUARD()
 
 		flags := flags
 		flags += {.Case_Allowed, .Break_Allowed}
@@ -99,10 +102,14 @@ check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt, flags: Check_Stmt_Flags
 		c.switch_current_cases = {}
 		c.switch_current_default = nil
 
-		xar.init(&c.switch_current_cases, temp)
+		xar.init(&c.switch_current_cases, ast_allocator(c.u))
+		// xar.init(&c.switch_current_cases, temp)
 
 		check_expr(c, s.expr, &{})
 		check_stmt(c, s.body, flags)
+
+		s.cases   = c.switch_current_cases
+		s.default = c.switch_current_default
 	case ^Ast_Stmt_Case:
 		if .Case_Allowed not_in flags {
 			check_error(c, s.t, "case outside of switch statement")
@@ -118,14 +125,17 @@ check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt, flags: Check_Stmt_Flags
 			return
 		}
 
-		for it := xar.iterator(&c.switch_current_cases); value in xar.iterate_by_val(&it) {
-			if value == o.const_value {
-				check_error(c, s.t, "duplicate case value %v", value)
+		for it := xar.iterator(&c.switch_current_cases); case_ in xar.iterate_by_val(&it) {
+			assert(case_.condition.value != nil)
+			if case_.condition.value == o.const_value {
+				check_error(c, s.t, "duplicate case value %v", case_.condition.value)
+				// TODO(robin): better error diagnostics, reference other case
 				return
 			}
 		}
 
-		xar.push_back(&c.switch_current_cases, o.const_value)
+		#assert(intrinsics.type_union_variant_count(Const_Value) == 1, "const_value out of sync in switch case")
+		xar.push_back(&c.switch_current_cases, s)
 	case ^Ast_Stmt_Default:
 		if .Case_Allowed not_in flags {
 			check_error(c, s.t, "default outside of switch statement")
