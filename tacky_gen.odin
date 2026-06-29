@@ -77,28 +77,3 @@ tacky_gen_block :: proc(c: ^Tacky_Gen_Context, body: ^Ast_Block) {
 		}
 	}
 }
-
-tacky_gen_push_loop_targets :: proc(c: ^Tacky_Gen_Context) -> (label_break, label_continue: Tacky_Label) {
-	label_break, label_continue = tacky_gen_make_label(c), tacky_gen_make_label(c)
-
-	xar.push_back(&c.targets_break, label_break)
-	xar.push_back(&c.targets_continue, label_continue)
-
-	return
-}
-
-tacky_gen_pop_loop_targets_assert :: proc(c: ^Tacky_Gen_Context, label_break, label_continue: Tacky_Label) {
-	assert(xar_last(&c.targets_break) == label_break)
-	assert(xar_last(&c.targets_continue) == label_continue)
-
-	xar.pop(&c.targets_break)
-	xar.pop(&c.targets_continue)
-}
-
-/*
-Guards a loop push of the break and continue label. This also asserts that on pop, that the current targets are actually active.
-*/
-@(deferred_in_out=tacky_gen_pop_loop_targets_assert)
-tacky_gen_push_loop_targets_guard :: proc(c: ^Tacky_Gen_Context) -> (label_break, label_continue: Tacky_Label) {
-	return tacky_gen_push_loop_targets(c)
-}

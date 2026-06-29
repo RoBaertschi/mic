@@ -2,6 +2,33 @@ package mic
 
 import "core:container/xar"
 
+@(private="file")
+tacky_gen_push_loop_targets :: proc(c: ^Tacky_Gen_Context) -> (label_break, label_continue: Tacky_Label) {
+	label_break, label_continue = tacky_gen_make_label(c), tacky_gen_make_label(c)
+
+	xar.push_back(&c.targets_break, label_break)
+	xar.push_back(&c.targets_continue, label_continue)
+
+	return
+}
+
+@(private="file")
+tacky_gen_pop_loop_targets_assert :: proc(c: ^Tacky_Gen_Context, label_break, label_continue: Tacky_Label) {
+	assert(xar_last(&c.targets_break) == label_break)
+	assert(xar_last(&c.targets_continue) == label_continue)
+
+	xar.pop(&c.targets_break)
+	xar.pop(&c.targets_continue)
+}
+
+/*
+Guards a loop push of the break and continue label. This also asserts that on pop, that the current targets are actually active.
+*/
+@(deferred_in_out=tacky_gen_pop_loop_targets_assert, private="file")
+tacky_gen_push_loop_targets_guard :: proc(c: ^Tacky_Gen_Context) -> (label_break, label_continue: Tacky_Label) {
+	return tacky_gen_push_loop_targets(c)
+}
+
 tacky_gen_stmt :: proc(c: ^Tacky_Gen_Context, stmt: ^Ast_Stmt) {
 	lazy_label :: proc(c: ^Tacky_Gen_Context, e: ^Entity) -> Tacky_Label {
 		ensure(e != nil)
