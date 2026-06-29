@@ -4,5 +4,7 @@ int main(void) {
         continue;
     }
 
-    for (;;) {}
+    switch (1) { case 1: 1; default: 2; }
+
+    for (;;);
 }

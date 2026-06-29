@@ -81,5 +81,8 @@ check_stmt :: proc(c: ^Checker_Context, stmt: ^Ast_Stmt, flags: Check_Stmt_Flags
 		}
 
 		check_stmt(c, s.body, flags)
+	case ^Ast_Stmt_Switch:  unimplemented()
+	case ^Ast_Stmt_Case:    unimplemented()
+	case ^Ast_Stmt_Default: unimplemented()
 	}
 }

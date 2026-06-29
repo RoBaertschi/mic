@@ -397,6 +397,21 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 		// NOTE(robin): cannot use skip because no semicolon or } required
 		// TODO(robin): find a better way to skip if stmt's
 		return stmt
+	case .Case:
+		stmt, _ := p_parse_case(p)
+		// NOTE(robin): cannot use skip because no semicolon or } required
+		// TODO(robin): find a better way to skip if stmt's
+		return stmt
+	case .Default:
+		stmt, _ := p_parse_default(p)
+		// NOTE(robin): cannot use skip because no semicolon or } required
+		// TODO(robin): find a better way to skip if stmt's
+		return stmt
+	case .Switch:
+		stmt, _ := p_parse_switch(p)
+		// NOTE(robin): cannot use skip because no semicolon or } required
+		// TODO(robin): find a better way to skip if stmt's
+		return stmt
 	case .Identifier:
 		if p.peek_token.kind == .Colon {
 			stmt, _ := p_parse_label(p)
@@ -413,6 +428,72 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 		}
 		return stmt_expr
 	}
+}
+
+p_parse_switch :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	switch_token: Token
+	switch_token, ok = p_expect(p, .Switch)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, switch_token)
+		return
+	}
+
+	stmt_switch := ast_new(p.u, switch_token, Ast_Stmt_Switch)
+	stmt         = stmt_switch
+
+	p_expect_peek(p, .Open_Paren) or_return
+	p_next_token(p)
+	stmt_switch.expr, ok = p_parse_expr(p, .Lowest)
+	ok or_return
+
+	p_expect_peek(p, .Close_Paren) or_return
+	p_next_token(p)
+	stmt_switch.body = p_parse_stmt(p)
+
+	return
+}
+
+p_parse_default :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	default_token: Token
+	default_token, ok = p_expect(p, .Default)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, default_token)
+		return
+	}
+
+	stmt_case      := ast_new(p.u, default_token, Ast_Stmt_Default)
+	stmt             = stmt_case
+	
+	_, ok = p_expect_peek(p, .Colon)
+	ok or_return
+
+	p_next_token(p)
+	stmt_case.inner = p_parse_stmt(p)
+	return
+}
+
+p_parse_case :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	case_token: Token
+	case_token, ok = p_expect(p, .Case)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, case_token)
+		return
+	}
+
+	stmt_case      := ast_new(p.u, case_token, Ast_Stmt_Case)
+	stmt             = stmt_case
+
+	p_next_token(p)
+
+	stmt_case.condition, ok = p_parse_expr(p, .Lowest)
+	ok or_return
+	
+	_, ok = p_expect_peek(p, .Colon)
+	ok or_return
+
+	p_next_token(p)
+	stmt_case.inner = p_parse_stmt(p)
+	return
 }
 
 p_parse_for :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {

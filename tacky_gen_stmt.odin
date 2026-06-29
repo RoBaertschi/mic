@@ -241,6 +241,9 @@ tacky_gen_stmt :: proc(c: ^Tacky_Gen_Context, stmt: ^Ast_Stmt) {
 			},
 			label_break,
 		)
+	case ^Ast_Stmt_Switch:  unimplemented()
+	case ^Ast_Stmt_Case:    unimplemented()
+	case ^Ast_Stmt_Default: unimplemented()
 	}
 }
 

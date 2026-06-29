@@ -53,7 +53,9 @@ Token_Kind :: enum {
 
 	// Keywords
 	Break,
+	Case,
 	Continue,
+	Default,
 	Do,
 	Else,
 	For,
@@ -61,6 +63,7 @@ Token_Kind :: enum {
 	If,
 	Int,
 	Return,
+	Switch,
 	Void,
 	While,
 }
@@ -170,7 +173,9 @@ l_read_identifier :: proc(l: ^Lexer) -> (t: Token) {
 	// TODO: possible bottleneck, measure this
 	switch t.content {
 	case "break":    t.kind = .Break
+	case "case":     t.kind = .Case
 	case "continue": t.kind = .Continue
+	case "default":  t.kind = .Default
 	case "do":       t.kind = .Do
 	case "else":     t.kind = .Else
 	case "for":      t.kind = .For
@@ -178,6 +183,7 @@ l_read_identifier :: proc(l: ^Lexer) -> (t: Token) {
 	case "if":       t.kind = .If
 	case "int":      t.kind = .Int
 	case "return":   t.kind = .Return
+	case "switch":   t.kind = .Switch
 	case "void":     t.kind = .Void
 	case "while":    t.kind = .While
 	}

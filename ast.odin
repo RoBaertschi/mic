@@ -93,6 +93,9 @@ Ast_Stmt :: struct {
 		^Ast_Stmt_While,
 		^Ast_Stmt_Do_While,
 		^Ast_Stmt_For,
+		^Ast_Stmt_Switch,
+		^Ast_Stmt_Case,
+		^Ast_Stmt_Default,
 	},
 }
 
@@ -175,6 +178,26 @@ Ast_Stmt_For :: struct {
 	condition: ^Ast_Expr,                   // optional
 	post:      ^Ast_Expr,                   // optional
 	body:      ^Ast_Stmt,
+}
+
+Ast_Stmt_Switch :: struct {
+	using stmt: Ast_Stmt,
+
+	expr: ^Ast_Expr,
+	body: ^Ast_Stmt,
+}
+
+Ast_Stmt_Case :: struct {
+	using stmt: Ast_Stmt,
+
+	condition: ^Ast_Expr,
+	inner:     ^Ast_Stmt,
+}
+
+Ast_Stmt_Default :: struct {
+	using stmt: Ast_Stmt,
+
+	inner: ^Ast_Stmt,
 }
 
 Ast_Expr :: struct {
@@ -431,7 +454,7 @@ ast_stmt_write_human_readable :: proc(stmt: ^Ast_Stmt, w: io.Writer, depth: int)
 		ast_expr_write_human_readable(s.condition, w, depth)
 		io.write_string(w, "\n")
 	case ^Ast_Stmt_For:
-		io.write_string(w, "Do:\n")
+		io.write_string(w, "For:\n")
 		pad(w, depth+1)
 		io.write_string(w, "init: ")
 		switch init in s.init {
@@ -448,7 +471,7 @@ ast_stmt_write_human_readable :: proc(stmt: ^Ast_Stmt, w: io.Writer, depth: int)
 		if s.condition != nil {
 			ast_expr_write_human_readable(s.condition, w, depth+1)
 		} else {
-			io.write_string(w, "<none>\n")
+			io.write_string(w, "<none>")
 		}
 		io.write_string(w, "\n")
 
@@ -464,6 +487,22 @@ ast_stmt_write_human_readable :: proc(stmt: ^Ast_Stmt, w: io.Writer, depth: int)
 		pad(w, depth+1)
 		io.write_string(w, "body: ")
 		ast_stmt_write_human_readable(s.body, w, depth+1)
+	case ^Ast_Stmt_Switch:
+		io.write_string(w, "Switch ")
+		ast_expr_write_human_readable(s.expr, w, depth)
+		io.write_string(w, ":\n")
+		pad(w, depth+1)
+		ast_stmt_write_human_readable(s.body, w, depth+1)
+	case ^Ast_Stmt_Case:
+		io.write_string(w, "Case ")
+		ast_expr_write_human_readable(s.condition, w, depth)
+		io.write_string(w, ":\n")
+		pad(w, depth+1)
+		ast_stmt_write_human_readable(s.inner, w, depth+1)
+	case ^Ast_Stmt_Default:
+		io.write_string(w, "Default:\n")
+		pad(w, depth+1)
+		ast_stmt_write_human_readable(s.inner, w, depth+1)
 	}
 }
 
