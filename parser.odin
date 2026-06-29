@@ -370,6 +370,33 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 			p_skip_stmt_close_brace(p)
 		}
 		return stmt
+	case .Break:
+		stmt, ok := p_parse_keyword(p, .Break, Ast_Stmt_Break)
+		if !ok {
+			p_skip_stmt(p)
+		}
+		return stmt
+	case .Continue:
+		stmt, ok := p_parse_keyword(p, .Continue, Ast_Stmt_Continue)
+		if !ok {
+			p_skip_stmt(p)
+		}
+		return stmt
+	case .While:
+		stmt, _ := p_parse_while(p)
+		// NOTE(robin): cannot use skip because no semicolon or } required
+		// TODO(robin): find a better way to skip if stmt's
+		return stmt
+	case .Do:
+		stmt, _ := p_parse_do_while(p)
+		// NOTE(robin): cannot use skip because no semicolon or } required
+		// TODO(robin): find a better way to skip if stmt's
+		return stmt
+	case .For:
+		stmt, _ := p_parse_for(p)
+		// NOTE(robin): cannot use skip because no semicolon or } required
+		// TODO(robin): find a better way to skip if stmt's
+		return stmt
 	case .Identifier:
 		if p.peek_token.kind == .Colon {
 			stmt, _ := p_parse_label(p)
@@ -386,6 +413,121 @@ p_parse_stmt :: proc(p: ^Parser) -> ^Ast_Stmt {
 		}
 		return stmt_expr
 	}
+}
+
+p_parse_for :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	for_token: Token
+	for_token, ok = p_expect(p, .For)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, for_token)
+		return
+	}
+
+	stmt_for := ast_new(p.u, for_token, Ast_Stmt_For)
+	stmt      = stmt_for
+
+	p_expect_peek(p, .Open_Paren) or_return
+	p_next_token(p)
+
+	#partial switch p.current_token.kind {
+	case .Semicolon: // do nothing
+	case .Int:
+		stmt_for.init = p_parse_decl(p)
+		p_expect(p, .Semicolon) or_return
+	case:
+		stmt_for.init, ok = p_parse_expr(p, .Lowest)
+		ok or_return
+		p_expect_peek(p, .Semicolon) or_return
+	}
+
+	assert(p.current_token.kind == .Semicolon)
+
+	if p.peek_token.kind != .Semicolon {
+		p_next_token(p)
+		stmt_for.condition, ok = p_parse_expr(p, .Lowest)
+		ok or_return
+		p_expect_peek(p, .Semicolon)
+	} else {
+		p_next_token(p)
+	}
+
+	assert(p.current_token.kind == .Semicolon)
+
+	if p.peek_token.kind != .Close_Paren {
+		p_next_token(p)
+		stmt_for.post, ok = p_parse_expr(p, .Lowest)
+		ok or_return
+		p_expect_peek(p, .Close_Paren)
+	} else {
+		p_next_token(p)
+	}
+
+	p_next_token(p)
+	stmt_for.body = p_parse_stmt(p)
+	return
+}
+
+p_parse_do_while :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	do_token: Token
+	do_token, ok = p_expect(p, .Do)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, do_token)
+		return
+	}
+
+	stmt_while := ast_new(p.u, do_token, Ast_Stmt_Do_While)
+	stmt        = stmt_while
+
+	p_next_token(p)
+	stmt_while.body = p_parse_stmt(p)
+
+	p_expect_peek(p, .While) or_return
+	p_expect_peek(p, .Open_Paren) or_return
+	p_next_token(p)
+	stmt_while.condition, ok = p_parse_expr(p, .Lowest)
+	ok or_return // NOTE(robin): a bit of an abuse of the syntax, but I will allow it for now
+
+	p_expect_peek(p, .Close_Paren) or_return
+	p_expect_peek(p, .Semicolon) or_return
+	return
+}
+
+p_parse_while :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
+	while_token: Token
+	while_token, ok = p_expect(p, .While)
+	if !ok {
+		stmt = ast_new_stmt_error(p.u, while_token)
+		return
+	}
+
+	stmt_while := ast_new(p.u, while_token, Ast_Stmt_While)
+	stmt        = stmt_while
+
+	p_expect_peek(p, .Open_Paren) or_return
+	p_next_token(p)
+
+	// NOTE: We still want to assign the condition even if expr parsing failed
+	stmt_while.condition, ok = p_parse_expr(p, .Lowest)
+	ok or_return
+
+	p_expect_peek(p, .Close_Paren) or_return
+	p_next_token(p)
+
+	stmt_while.body = p_parse_stmt(p)
+	ok              = true
+	return
+}
+
+p_parse_keyword :: proc(p: ^Parser, kind: Token_Kind, $T: typeid) -> (^Ast_Stmt, bool) {
+	keyword_token, ok := p_expect(p, kind)
+	if !ok {
+		return ast_new_stmt_error(p.u, keyword_token), false
+	}
+
+	stmt_keyword := ast_new(p.u, keyword_token, T)
+
+	_, ok = p_expect_peek(p, .Semicolon)
+	return stmt_keyword, ok
 }
 
 p_parse_compound :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
@@ -408,14 +550,11 @@ p_parse_goto :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 	stmt       = stmt_goto
 
 	label_token: Token
-	label_token, ok = p_expect_peek(p, .Identifier)
-	if !ok {
-		return
-	}
+	label_token = p_expect_peek(p, .Identifier) or_return
 
 	stmt_goto.label = ast_new_ident(p.u, label_token)
 
-	_, ok = p_expect_peek(p, .Semicolon)
+	p_expect_peek(p, .Semicolon) or_return
 	return
 }
 
@@ -432,9 +571,7 @@ p_parse_label :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 	stmt_label.name  = ast_new_ident(p.u, label_token)
 	
 	_, ok = p_expect_peek(p, .Colon)
-	if !ok {
-		return
-	}
+	ok or_return
 
 	p_next_token(p)
 	stmt_label.inner = p_parse_stmt(p)
@@ -454,11 +591,9 @@ p_parse_return :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 	p_next_token(p)
 
 	stmt_return.result, ok = p_parse_expr(p, .Lowest)
-	if !ok {
-		return
-	}
+	ok or_return
 
-	_, ok = p_expect_peek(p, .Semicolon)
+	p_expect_peek(p, .Semicolon) or_return
 
 	return
 }
@@ -474,21 +609,14 @@ p_parse_if :: proc(p: ^Parser) -> (stmt: ^Ast_Stmt, ok: bool) {
 	stmt_if := ast_new(p.u, if_token, Ast_Stmt_If)
 	stmt     = stmt_if
 
-	if _, ok = p_expect_peek(p, .Open_Paren); !ok {
-		return
-	}
-
+	p_expect_peek(p, .Open_Paren) or_return
 	p_next_token(p)
 
 	stmt_if.condition, ok = p_parse_expr(p, .Lowest)
-	if !ok {
-		return
-	}
+	ok or_return
 
 
-	if _, ok = p_expect_peek(p, .Close_Paren); !ok {
-		return
-	}
+	p_expect_peek(p, .Close_Paren) or_return
 
 	p_next_token(p)
 

@@ -97,6 +97,13 @@ Checker_Context :: struct {
 	u:     ^Unit,
 }
 
+Check_Stmt_Flag :: enum {
+	Break_Allowed,
+	Continue_Allowed,
+}
+
+Check_Stmt_Flags :: bit_set[Check_Stmt_Flag]
+
 check_push_scope :: proc(c: ^Checker_Context) {
 	c.scope = scope_new(c.u, c.scope)
 }

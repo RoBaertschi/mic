@@ -79,7 +79,7 @@ Ast_Decl_Variable :: struct {
 Ast_Stmt :: struct {
 	t: Token,
 
-	// NOTE: can be nil, indicates an nil stmt(;)
+	// NOTE: can be nil, indicates an nil stmt (';')
 	variant: union {
 		^Ast_Stmt_Error,
 		^Ast_Stmt_Expr,
@@ -88,6 +88,11 @@ Ast_Stmt :: struct {
 		^Ast_Stmt_Label,
 		^Ast_Stmt_Goto,
 		^Ast_Stmt_Compound,
+		^Ast_Stmt_Break,
+		^Ast_Stmt_Continue,
+		^Ast_Stmt_While,
+		^Ast_Stmt_Do_While,
+		^Ast_Stmt_For,
 	},
 }
 
@@ -139,6 +144,37 @@ Ast_Stmt_Compound :: struct {
 	using stmt: Ast_Stmt,
 
 	block: xar.Array(Ast_Block_Item, 8),
+}
+
+Ast_Stmt_Break :: struct {
+	using stmt: Ast_Stmt,
+}
+
+Ast_Stmt_Continue :: struct {
+	using stmt: Ast_Stmt,
+}
+
+Ast_Stmt_While :: struct {
+	using stmt: Ast_Stmt,
+
+	condition: ^Ast_Expr,
+	body:      ^Ast_Stmt,
+}
+
+Ast_Stmt_Do_While :: struct {
+	using stmt: Ast_Stmt,
+
+	body:      ^Ast_Stmt,
+	condition: ^Ast_Expr,
+}
+
+Ast_Stmt_For :: struct {
+	using stmt: Ast_Stmt,
+
+	init:      union{^Ast_Decl, ^Ast_Expr}, // optional
+	condition: ^Ast_Expr,                   // optional
+	post:      ^Ast_Expr,                   // optional
+	body:      ^Ast_Stmt,
 }
 
 Ast_Expr :: struct {
@@ -376,6 +412,58 @@ ast_stmt_write_human_readable :: proc(stmt: ^Ast_Stmt, w: io.Writer, depth: int)
 		}
 		pad(w, depth)
 		io.write_string(w, "}\n")
+	case ^Ast_Stmt_Break:
+		io.write_string(w, "Break\n")
+	case ^Ast_Stmt_Continue:
+		io.write_string(w, "Continue\n")
+	case ^Ast_Stmt_While:
+		io.write_string(w, "While ")
+		ast_expr_write_human_readable(s.condition, w, depth)
+		io.write_string(w, ":\n")
+		pad(w, depth+1)
+		ast_stmt_write_human_readable(s.body, w, depth+1)
+	case ^Ast_Stmt_Do_While:
+		io.write_string(w, "Do:\n")
+		pad(w, depth+1)
+		ast_stmt_write_human_readable(s.body, w, depth+1)
+		pad(w, depth)
+		io.write_string(w, "While ")
+		ast_expr_write_human_readable(s.condition, w, depth)
+		io.write_string(w, "\n")
+	case ^Ast_Stmt_For:
+		io.write_string(w, "Do:\n")
+		pad(w, depth+1)
+		io.write_string(w, "init: ")
+		switch init in s.init {
+		case nil:
+			io.write_string(w, "<none>\n")
+		case ^Ast_Decl:
+			ast_decl_write_human_readable(init, w, depth+1)
+		case ^Ast_Expr:
+			ast_expr_write_human_readable(init, w, depth+1)
+		}
+
+		pad(w, depth+1)
+		io.write_string(w, "condition: ")
+		if s.condition != nil {
+			ast_expr_write_human_readable(s.condition, w, depth+1)
+		} else {
+			io.write_string(w, "<none>\n")
+		}
+		io.write_string(w, "\n")
+
+		pad(w, depth+1)
+		io.write_string(w, "post: ")
+		if s.post != nil {
+			ast_expr_write_human_readable(s.post, w, depth+1)
+		} else {
+			io.write_string(w, "<none>")
+		}
+		io.write_string(w, "\n")
+
+		pad(w, depth+1)
+		io.write_string(w, "body: ")
+		ast_stmt_write_human_readable(s.body, w, depth+1)
 	}
 }
 

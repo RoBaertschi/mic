@@ -52,12 +52,17 @@ Token_Kind :: enum {
 	Constant,
 
 	// Keywords
+	Break,
+	Continue,
+	Do,
 	Else,
+	For,
 	Goto,
 	If,
 	Int,
 	Return,
 	Void,
+	While,
 }
 
 Token :: struct {
@@ -161,13 +166,20 @@ l_read_identifier :: proc(l: ^Lexer) -> (t: Token) {
 
 	t.content = l.input[t.idx:l.idx]
 
+	// NOTE: this is not optimized very well, should probably move to a map
+	// TODO: possible bottleneck, measure this
 	switch t.content {
-	case "else":   t.kind = .Else
-	case "goto":   t.kind = .Goto
-	case "if":     t.kind = .If
-	case "int":    t.kind = .Int
-	case "void":   t.kind = .Void
-	case "return": t.kind = .Return
+	case "break":    t.kind = .Break
+	case "continue": t.kind = .Continue
+	case "do":       t.kind = .Do
+	case "else":     t.kind = .Else
+	case "for":      t.kind = .For
+	case "goto":     t.kind = .Goto
+	case "if":       t.kind = .If
+	case "int":      t.kind = .Int
+	case "return":   t.kind = .Return
+	case "void":     t.kind = .Void
+	case "while":    t.kind = .While
 	}
 
 	return t
